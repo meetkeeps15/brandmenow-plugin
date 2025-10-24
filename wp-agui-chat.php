@@ -32,9 +32,7 @@ class WP_AGUI_Chat_Plugin {
       // Fal AI (server-side proxy from WordPress)
       'fal_key' => '64ea8d6d-4f33-4915-8b5d-d2c5b8d6699b:7d926dbff1d130130c1cf402efccd184',
       'fal_model' => 'fal-ai/flux/schnell',
-      // Add Banana.dev defaults
-      'banana_key' => '',
-      'banana_model' => '',
+
       // GoHighLevel integration defaults
       'ghl_pit' => 'pit-ca167896-6606-4d07-b042-d294e6bf8d2d',
       'ghl_location_id' => 'xK1e5YGQ7gK6NjoyhyRI',
@@ -350,11 +348,7 @@ class WP_AGUI_Chat_Plugin {
     add_settings_field('fal_key', 'Fal API Key', [$this, 'field_text'], 'agui_crm', 'fal_ai', ['key'=>'fal_key']);
     add_settings_field('fal_model', 'Fal Model', [$this, 'field_text'], 'agui_crm', 'fal_ai', ['key'=>'fal_model']);
 
-    add_settings_section('banana_dev', 'Banana.dev (Server-side)', function(){
-      echo '<p>Use Banana.dev to run your image model server-side via WordPress. Provide your Banana API Key and Model Key.</p>';
-    }, 'agui_crm');
-    add_settings_field('banana_key', 'Banana API Key', [$this, 'field_text'], 'agui_crm', 'banana_dev', ['key'=>'banana_key']);
-    add_settings_field('banana_model', 'Banana Model Key', [$this, 'field_text'], 'agui_crm', 'banana_dev', ['key'=>'banana_model']);
+
 
     add_settings_section('ghl', 'GoHighLevel (Private Integration)', function(){
       echo '<p>Provide your GoHighLevel Private Integration Token (PIT) and Location ID. The plugin will use them server-side to create contacts from the pre‑chat form without exposing secrets client-side.</p>';
@@ -569,48 +563,7 @@ class WP_AGUI_Chat_Plugin {
     if($steps !== null) { $body_arr['num_inference_steps'] = $steps; }
     if($seed !== null) { $body_arr['seed'] = $seed; }
 
-    // 0) Prefer Banana.dev if configured
-    $banana_key = trim($cfg['banana_key'] ?? (getenv('BANANA_API_KEY') ?: ''));
-    $banana_model = trim($cfg['banana_model'] ?? (getenv('BANANA_MODEL_KEY') ?: ''));
-    if ($banana_key && $banana_model) {
-      $id = uniqid('agui_', true);
-      $headers_banana = [ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ];
-      // Start job
-      $start = wp_remote_post('https://api.banana.dev/start/v4/', [
-        'headers' => $headers_banana,
-        'body' => wp_json_encode(['apiKey' => $banana_key, 'modelKey' => $banana_model, 'id' => $id, 'inputs' => $body_arr]),
-        'timeout' => 30,
-      ]);
-      // Poll results up to ~15 seconds
-      for ($i = 0; $i < 15; $i++) {
-        $res = wp_remote_post('https://api.banana.dev/results/v4/', [
-          'headers' => $headers_banana,
-          'body' => wp_json_encode(['apiKey' => $banana_key, 'id' => $id]),
-          'timeout' => 30,
-        ]);
-        if (!is_wp_error($res)) {
-          $codeR = wp_remote_retrieve_response_code($res);
-          $jsonR = json_decode(wp_remote_retrieve_body($res), true);
-          // Typical success shapes: message==='success' OR finished===true OR modelOutputs present
-          $hasOutputs = is_array($jsonR) && isset($jsonR['modelOutputs']) && is_array($jsonR['modelOutputs']) && isset($jsonR['modelOutputs'][0]);
-          $finished = is_array($jsonR) && (!empty($jsonR['finished']) || (!empty($jsonR['message']) && strtolower($jsonR['message'])==='success'));
-          if ($codeR >= 200 && $codeR < 300 && ($hasOutputs || $finished)) {
-            $imageUri = '';
-            if ($hasOutputs) {
-              $mo = $jsonR['modelOutputs'][0];
-              if (isset($mo['image_base64'])) { $imageUri = 'data:image/png;base64,' . $mo['image_base64']; }
-              elseif (isset($mo['image_url'])) { $imageUri = $mo['image_url']; }
-            }
-            if (!$imageUri && isset($jsonR['image_url'])) { $imageUri = $jsonR['image_url']; }
-            if ($imageUri) {
-              return new WP_REST_Response(['ok' => true, 'status' => 200, 'data' => ['image_url' => $imageUri, 'caption' => 'Visual concept: ' . esc_html($prompt)]], 200);
-            }
-          }
-        }
-        sleep(1);
-      }
-      // If Banana configured but didn’t return in time, continue to other fallbacks
-    }
+
 
     // 1) Try Fal.ai directly if key configured
     if ($fal_key) {
