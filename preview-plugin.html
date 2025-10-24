@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WP AGUI Chat Preview</title>
+  <link rel="stylesheet" href="assets/agui-wp.css" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .container { max-width: 1200px; margin: 24px auto; }
+    .toolbar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+    #connectBtn { padding:8px 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="connectionStatus" class="status">Disconnected</div>
+    <div class="toolbar">
+      <button id="connectBtn">Connect</button>
+    </div>
+
+    <!-- Pre-chat form (hidden in this preview) -->
+    <form id="preChatForm" style="display:none"></form>
+
+    <!-- BrandMeNow chat app scaffold -->
+    <div class="bm-chat-app">
+      <aside class="bm-sidebar">
+        <div class="bm-sidebar-header">
+          <button id="sidebar-toggle" aria-expanded="true" title="Toggle sidebar">⟷</button>
+          <button id="bm-new-chat-btn" class="btn">New Chat</button>
+        </div>
+        <div id="bm-conversation-list" class="bm-conversation-list"></div>
+      </aside>
+      <main class="bm-chat-main">
+        <div id="bm-chat-messages" class="bm-chat-messages" style="min-height:300px;"></div>
+        <div class="bm-composer">
+          <input id="bm-user-input" type="text" placeholder="Type a message…" />
+          <button id="bm-send-btn" class="btn btn-primary">Send</button>
+          <input id="bm-file-input" type="file" style="display:none" />
+          <button id="bm-attach-button" class="btn">Attach</button>
+          <button id="bm-voice-button" class="btn">Voice</button>
+        </div>
+        <div id="bm-error" class="bm-error" style="display:none"></div>
+      </main>
+    </div>
+  </div>
+
+  <div id="messages" style="display:none"></div>
+  <div id="typingIndicator" class="hidden" style="display:none"></div>
+  <div id="chatCard" style="display:none"></div>
+  <div id="suggestions" style="display:none"></div>
+  <input id="fileInput" type="file" style="display:none" />
+
+  <script>
+    window.AGUiConfig = {
+      // Dummy endpoints for preview; ensure no real network is attempted
+      sseUrl: '',
+      wsUrl: '',
+      sendUrl: '',
+      wpFormEndpoint: '/wp-json/agui-chat/v1/ghl/contact',
+      wpSendEndpoint: '/wp-json/agui-chat/v1/agent/send',
+      wpImageEndpoint: '',
+      agentImageEndpoint: 'http://127.0.0.1:8000/api/fal/generate',
+      fastApiBase: 'http://127.0.0.1:8000'
+    };
+  </script>
+  <!-- BM Multi-Step Form Preview -->
+  <div id="bm-ms-form" class="bm-ms-form">
+    <div class="bm-ms-form-content">
+
+    <!-- Step 1: Basic details -->
+    <form id="bmms-step1" class="bmms-step" novalidate>
+      <div class="bmms-header">
+        <div class="bmms-logo-spinner"></div>
+        <h2>Hi, I'm Airo—your AI-powered assistant.</h2>
+        <p class="muted">Let’s create a logo together.</p>
+      </div>
+      <div class="bmms-grid">
+        <label class="bmms-field bmms-optional">
+          <span>Your name</span>
+          <input type="text" name="name" placeholder="Jane Doe" />
+        </label>
+        <label class="bmms-field bmms-optional">
+          <span>Email</span>
+          <input type="email" name="email" placeholder="you@company.com" />
+        </label>
+      </div>
+      <label class="bmms-field">
+        <span>Describe your business</span>
+        <input type="text" name="description" placeholder="brandmenow" />
+      </label>
+      <p class="bmms-tip">Tip: Including your business name gives me more to work with.</p>
+      <div class="bmms-actions">
+        <button type="submit" class="btn btn-primary">Get Started</button>
+      </div>
+    </form>
+
+    <!-- Step 2: Icon options -->
+    <section id="bmms-step2" class="bmms-step">
+      <div class="bmms-splash">
+        <div class="bmms-logo-spinner"></div>
+        <h3>Hang tight, I’m getting your logo started…</h3>
+      </div>
+      <div class="bmms-options" style="display:none">
+        <h3>Pick a style to start</h3>
+        <div class="bmms-icon-grid">
+          <label class="bmms-icon-card">
+            <input type="radio" name="bmms_icon" value="gauge" checked />
+            <span class="bmms-icon">◎</span>
+            <span>Classic mark</span>
+          </label>
+          <label class="bmms-icon-card">
+            <input type="radio" name="bmms_icon" value="lightning" />
+            <span class="bmms-icon">⚡</span>
+            <span>Bold mark</span>
+          </label>
+          <label class="bmms-icon-card">
+            <input type="radio" name="bmms_icon" value="rocket" />
+            <span class="bmms-icon">🚀</span>
+            <span>Modern mark</span>
+          </label>
+        </div>
+        <div class="bmms-ideas-grid" style="margin-top:12px;">
+          <h4 style="margin:8px 0;">Choose a logo concept to base your variations on</h4>
+          <div class="bmms-ideas">
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_01.jpg" checked /><img src="assets/logo-ideas/logoideas_01.jpg" alt="Concept 01" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_02.jpg" /><img src="assets/logo-ideas/logoideas_02.jpg" alt="Concept 02" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_04.jpg" /><img src="assets/logo-ideas/logoideas_04.jpg" alt="Concept 04" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_05.jpg" /><img src="assets/logo-ideas/logoideas_05.jpg" alt="Concept 05" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_06.png" /><img src="assets/logo-ideas/logoideas_06.png" alt="Concept 06" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_07.jpg" /><img src="assets/logo-ideas/logoideas_07.jpg" alt="Concept 07" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_09.jpg" /><img src="assets/logo-ideas/logoideas_09.jpg" alt="Concept 09" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_10.png" /><img src="assets/logo-ideas/logoideas_10.png" alt="Concept 10" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_11.png" /><img src="assets/logo-ideas/logoideas_11.png" alt="Concept 11" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_12.png" /><img src="assets/logo-ideas/logoideas_12.png" alt="Concept 12" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_13.png" /><img src="assets/logo-ideas/logoideas_13.png" alt="Concept 13" /></label>
+            <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_14.png" /><img src="assets/logo-ideas/logoideas_14.png" alt="Concept 14" /></label>
+          </div>
+        </div>
+        <div class="bmms-actions">
+          <button type="button" class="btn bmms-back">Back</button>
+          <button type="button" class="btn btn-primary bmms-next">Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Add brand text -->
+    <section id="bmms-step3" class="bmms-step">
+      <div class="bmms-splash">
+        <div class="bmms-logo-spinner"></div>
+        <h3>Just a moment, I’m getting your logo started…</h3>
+      </div>
+      <div class="bmms-fields" style="display:none">
+        <label class="bmms-field">
+          <span>What text would you like to add to your logo?</span>
+          <input type="text" name="brand_text" placeholder="I suggest your business name here" />
+        </label>
+        <div class="bmms-actions">
+          <button type="button" class="btn bmms-skip">Skip</button>
+          <button type="button" class="btn bmms-back">Back</button>
+          <button type="button" class="btn btn-primary bmms-next">Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4: Variations slider -->
+    <section id="bmms-step4" class="bmms-step">
+      <div class="bmms-splash">
+        <div class="bmms-logo-spinner"></div>
+        <h3>Hold on, I’m adding your text and generating layouts. This may take a few minutes…</h3>
+      </div>
+      <div class="bmms-slider" style="display:none">
+        <div class="bmms-slider-header">
+          <button class="bmms-slide-nav prev" type="button">←</button>
+          <div class="bmms-slide-indicator">Variations</div>
+          <button class="bmms-slide-nav next" type="button">→</button>
+        </div>
+        <div class="bmms-slides"></div>
+        <div class="bmms-actions">
+          <button type="button" class="btn bmms-back">Back</button>
+          <button type="button" class="btn btn-primary bmms-next">Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 5: Final preview -->
+    <section id="bmms-step5" class="bmms-step">
+      <div class="bmms-splash">
+        <div class="bmms-logo-spinner"></div>
+        <h3>Finalizing your logo…</h3>
+      </div>
+      <div class="bmms-final" style="display:none">
+        <div class="bmms-final-view">
+          <img id="bmms-final-image" class="bmms-final-image" alt="Final logo" />
+        </div>
+        <div class="bmms-actions">
+          <button type="button" class="btn bmms-back">Back</button>
+          <button type="button" class="btn bmms-zoom">Zoom</button>
+          <button type="button" class="btn btn-primary bmms-download">Download</button>
+        </div>
+        <div class="bmms-zoom-overlay" style="display:none">
+          <button type="button" class="bmms-zoom-close">×</button>
+          <img id="bmms-zoom-image" alt="Zoomed logo" />
+        </div>
+      </div>
+    </section>
+    </div>
+  </div>
+  <script src="assets/agui-wp.js"></script>
+</body>
+</html>
+
+<!-- BM Multi-Step Form Preview -->
+<div id="bm-ms-form" class="bm-ms-form">
+  <!-- Step 1: Basic details -->
+  <form id="bmms-step1" class="bmms-step" novalidate>
+    <div class="bmms-header">
+      <div class="bmms-logo-spinner"></div>
+      <h2>Tell us about your business</h2>
+      <p class="muted">We’ll start with the basics so we can tailor your logo.</p>
+    </div>
+    <div class="bmms-grid">
+      <label class="bmms-field">
+        <span>Name</span>
+        <input type="text" name="name" placeholder="Jane’s Bakery" required />
+      </label>
+      <label class="bmms-field">
+        <span>Email</span>
+        <input type="email" name="email" placeholder="you@example.com" required />
+      </label>
+    </div>
+    <label class="bmms-field">
+      <span>Describe your business</span>
+      <textarea name="description" rows="4" placeholder="e.g., Artisan bakery specializing in sourdough"></textarea>
+    </label>
+    <div class="bmms-actions">
+      <button type="submit" class="btn btn-primary">Continue</button>
+    </div>
+  </form>
+
+  <!-- Step 2: Icon options -->
+  <section id="bmms-step2" class="bmms-step">
+    <div class="bmms-splash">
+      <div class="bmms-logo-spinner"></div>
+      <h3>Hang tight, I’m getting your logo started…</h3>
+    </div>
+    <div class="bmms-options" style="display:none">
+      <h3>Pick a style to start</h3>
+      <div class="bmms-icon-grid">
+        <label class="bmms-icon-card">
+          <input type="radio" name="bmms_icon" value="gauge" checked />
+          <span class="bmms-icon">◎</span>
+          <span>Classic mark</span>
+        </label>
+        <label class="bmms-icon-card">
+          <input type="radio" name="bmms_icon" value="lightning" />
+          <span class="bmms-icon">⚡</span>
+          <span>Bold mark</span>
+        </label>
+        <label class="bmms-icon-card">
+          <input type="radio" name="bmms_icon" value="rocket" />
+          <span class="bmms-icon">🚀</span>
+          <span>Modern mark</span>
+        </label>
+      </div>
+      <div class="bmms-ideas-grid" style="margin-top:12px;">
+        <h4 style="margin:8px 0;">Choose a logo concept to base your variations on</h4>
+        <div class="bmms-ideas">
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_01.jpg" checked /><img src="assets/logo-ideas/logoideas_01.jpg" alt="Concept 01" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_02.jpg" /><img src="assets/logo-ideas/logoideas_02.jpg" alt="Concept 02" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_04.jpg" /><img src="assets/logo-ideas/logoideas_04.jpg" alt="Concept 04" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_05.jpg" /><img src="assets/logo-ideas/logoideas_05.jpg" alt="Concept 05" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_06.png" /><img src="assets/logo-ideas/logoideas_06.png" alt="Concept 06" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_07.jpg" /><img src="assets/logo-ideas/logoideas_07.jpg" alt="Concept 07" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_09.jpg" /><img src="assets/logo-ideas/logoideas_09.jpg" alt="Concept 09" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_10.png" /><img src="assets/logo-ideas/logoideas_10.png" alt="Concept 10" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_11.png" /><img src="assets/logo-ideas/logoideas_11.png" alt="Concept 11" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_12.png" /><img src="assets/logo-ideas/logoideas_12.png" alt="Concept 12" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_13.png" /><img src="assets/logo-ideas/logoideas_13.png" alt="Concept 13" /></label>
+          <label class="bmms-idea-card"><input type="radio" name="bmms_logoidea" value="assets/logo-ideas/logoideas_14.png" /><img src="assets/logo-ideas/logoideas_14.png" alt="Concept 14" /></label>
+        </div>
+      </div>
+      <div class="bmms-actions">
+        <button type="button" class="btn bmms-back">Back</button>
+        <button type="button" class="btn btn-primary bmms-next">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 3: Add brand text -->
+  <section id="bmms-step3" class="bmms-step">
+    <div class="bmms-splash">
+      <div class="bmms-logo-spinner"></div>
+      <h3>Just a moment, I’m getting your logo started…</h3>
+    </div>
+    <div class="bmms-fields" style="display:none">
+      <label class="bmms-field">
+        <span>What text would you like to add to your logo?</span>
+        <input type="text" name="brand_text" placeholder="I suggest your business name here" />
+      </label>
+      <div class="bmms-actions">
+        <button type="button" class="btn bmms-skip">Skip</button>
+        <button type="button" class="btn bmms-back">Back</button>
+        <button type="button" class="btn btn-primary bmms-next">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 4: Variations slider -->
+  <section id="bmms-step4" class="bmms-step">
+    <div class="bmms-splash">
+      <div class="bmms-logo-spinner"></div>
+      <h3>Hold on, I’m adding your text and generating layouts. This may take a few minutes…</h3>
+    </div>
+    <div class="bmms-slider" style="display:none">
+      <div class="bmms-slider-header">
+        <button class="bmms-slide-nav prev" type="button">←</button>
+        <div class="bmms-slide-indicator">Variations</div>
+        <button class="bmms-slide-nav next" type="button">→</button>
+      </div>
+      <div class="bmms-endpoint-banner" style="font-size:12px;color:#6b7280;margin:6px 0 10px;display:block;">Generator: <span id="bmms-endpoint-text">WordPress REST</span></div>
+      <div class="bmms-slides"></div>
+      <div class="bmms-actions">
+        <button type="button" class="btn bmms-back">Back</button>
+        <button type="button" class="btn btn-primary bmms-next">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 5: Final preview -->
+  <section id="bmms-step5" class="bmms-step">
+    <div class="bmms-splash">
+      <div class="bmms-logo-spinner"></div>
+      <h3>Finalizing your logo…</h3>
+    </div>
+    <div class="bmms-final" style="display:none">
+      <div class="bmms-final-view">
+        <img id="bmms-final-image" class="bmms-final-image" alt="Final logo" />
+      </div>
+      <div class="bmms-actions">
+        <button type="button" class="btn bmms-back">Back</button>
+        <button type="button" class="btn bmms-zoom">Zoom</button>
+        <button type="button" class="btn btn-primary bmms-download">Download</button>
+      </div>
+      <div class="bmms-zoom-overlay" style="display:none">
+        <button type="button" class="bmms-zoom-close">×</button>
+        <img id="bmms-zoom-image" alt="Zoomed logo" />
+      </div>
+    </div>
+  </section>
+</div>
