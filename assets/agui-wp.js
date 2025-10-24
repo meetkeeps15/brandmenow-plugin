@@ -2804,10 +2804,10 @@
 
   function getImageEndpoint(){
     const cfg = window.AGUiConfig || window.AGConfig || {};
-    // Prefer Agent endpoint when wpImageEndpoint is empty in preview/static environments
+    // Prefer WordPress REST endpoint first to avoid CORS issues
     const wp = (cfg.wpImageEndpoint || '').replace(/\/$/, '');
     const agent = (cfg.agentImageEndpoint || '').replace(/\/$/, '');
-    const chosen = agent || wp || '/wp-json/agui-chat/v1/image/generate';
+    const chosen = wp || '/wp-json/agui-chat/v1/image/generate';
     // Update small banner text in Step 4
     const el = document.getElementById('bmms-endpoint-text');
     if (el) {
@@ -2830,7 +2830,7 @@
     const description = st.description || '';
     const icon = st.icon || 'modern';
     const email = st.email || '';
-    
+
     // Map icon choice to style wording
     const iconStyle = (function(){
       switch(icon){
@@ -2841,7 +2841,7 @@
         default: return 'modern mark';
       }
     })();
-    
+
     // Create AI prompts for logo variations
     const emailPart = email ? ` Contact email: ${email}.` : '';
     const basePrompt = `Create a professional logo for "${name}". Business description: ${description}. Style: ${iconStyle}.` + emailPart + ((st && st.selectedIdea) ? ' Use the provided reference image as the foundation for layout and iconography.' : '');
@@ -2859,58 +2859,72 @@
       `${basePrompt} Colorful and energetic design with dynamic elements`,
       `${basePrompt} Luxury brand design with premium aesthetics`
     ];
-    
-    // Generate logos using AI
+
+    // Multi-endpoint fallback: try WP REST, then Agent, then FastAPI if configured
+    const cfg = window.AGUiConfig || window.AGConfig || {};
+    const wp = (cfg.wpImageEndpoint || '').replace(/\/$/, '') || '/wp-json/agui-chat/v1/image/generate';
+    const agent = (cfg.agentImageEndpoint || '').replace(/\/$/, '');
+    const fastApi = (cfg.fastApiImageEndpoint || '').replace(/\/$/, '');
+    const endpoints = [wp, agent, fastApi].filter(Boolean);
+
+    // Generate logos using AI across available endpoints
     for(let i = 0; i < Math.min(n, variations.length); i++){
-      try {
-        const endpoint = getImageEndpoint();
-        console.log('Using image endpoint for AI generation:', endpoint);
-        const cfg = window.AGUiConfig || window.AGConfig || {};
-        const headers = { 'Content-Type': 'application/json' };
+      let success = false;
+      const payload = {
+        prompt: variations[i],
+        image_url: (st && st.selectedIdea) ? st.selectedIdea : '',
+        size: '1024x1024',
+        format: 'png',
+        guidance_scale: 3.5,
+        num_inference_steps: 25
+      };
+
+      for (const endpoint of endpoints){
         try {
-          const u = new URL(endpoint, window.location.origin);
-          const isAgent = u.pathname.includes('/api/');
-          const token = cfg.dbToken || cfg.db_token || '';
-          if (isAgent) {
-            // Bypass ngrok anti-abuse warning page so preflight reaches FastAPI
-            headers['ngrok-skip-browser-warning'] = '1';
-            if (token) {
-              headers['Authorization'] = `Bearer ${token}`;
-            }
+          // Banner reflects the primary endpoint
+          if (i === 0 && endpoint === endpoints[0]) {
+            try { getImageEndpoint(); } catch(e) {}
           }
-        } catch(e) {}
-        const response = await fetch(endpoint, {
-           method: 'POST',
-           headers,
-          body: JSON.stringify({
-            prompt: variations[i],
-            image_url: (st && st.selectedIdea) ? st.selectedIdea : '',
-            size: '1024x1024',
-            format: 'png',
-            guidance_scale: 3.5,
-            num_inference_steps: 25
-          })
-        });
-        
-        if(response.ok) {
-           const result = await response.json();
-           const url = extractImageUrl(result);
-           if(url && !String(url).startsWith('data:image/svg')){
-             arr.push({ id: 'ai_v' + i, dataUrl: url, prompt: variations[i] });
-           } else {
-             console.warn('No valid AI image URL returned for variant', i);
-             // AI-only mode: skip this variant
-           }
-         } else {
-          console.warn('Image generation response not ok for variant', i, response.status, response.statusText);
-          // AI-only mode: skip this variant
+          const headers = { 'Content-Type': 'application/json' };
+          try {
+            const u = new URL(endpoint, window.location.origin);
+            const isAgent = u.pathname.includes('/api/');
+            const token = cfg.dbToken || cfg.db_token || '';
+            if (isAgent) {
+              headers['ngrok-skip-browser-warning'] = '1';
+              if (token) headers['Authorization'] = `Bearer ${token}`;
+            }
+          } catch(e) {}
+
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            const url = extractImageUrl(result);
+            if (url && !String(url).startsWith('data:image/svg')){
+              arr.push({ id: 'ai_v' + i, dataUrl: url, prompt: variations[i] });
+              success = true;
+              break; // done for this variant
+            } else {
+              console.warn('No valid AI image URL returned for variant', i, 'via', endpoint);
+            }
+          } else {
+            console.warn('Image generation not ok', response.status, response.statusText, 'via', endpoint);
+          }
+        } catch(error) {
+          console.warn('AI generation failed via', endpoint, 'for variant', i, error);
         }
-      } catch(error) {
-        console.warn('AI generation failed for variant', i, error);
-        // AI-only mode: skip this variant
+      }
+
+      if (!success) {
+        // Skip variant if all endpoints failed
       }
     }
-    
+
     return arr; 
   }
   function makeSvg(icon, text, primary, bg, desc, idx){
@@ -2928,15 +2942,31 @@
   function safe(s){ return String(s||'').replace(/[\r\n]+/g,' ').slice(0,64); }
   function svgToPng(dataUrl, w, h){ return new Promise(function(resolve){ const img=new Image(); img.onload=function(){ const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h); resolve(c.toDataURL('image/png')); }; img.crossOrigin='anonymous'; img.src=dataUrl; }); }
   function extractImageUrl(result){
-    try{
-      const d = result?.data || result;
-      if(d?.images && d.images[0]?.url) return d.images[0].url;
-      if(d?.image_url) return d.image_url;
-      if(d?.url) return d.url;
-      if(d?.output && Array.isArray(d.output) && d.output[0]?.url) return d.output[0].url;
-      if(Array.isArray(d) && d[0]?.url) return d[0].url;
-      return '';
-    }catch(e){ return ''; }
+    try {
+      const data = result?.data || result;
+      if(!data) return '';
+      if(typeof data === 'string') return data;
+      const candidates = [];
+      candidates.push(data.image_url);
+      candidates.push(data.url);
+      candidates.push(typeof data.image === 'string' ? data.image : null);
+      candidates.push(data.data_uri);
+      candidates.push(data.dataUrl);
+      candidates.push(data.image_base64);
+      candidates.push(data.base64);
+      candidates.push(data?.images?.[0]?.url);
+      candidates.push(data?.output?.images?.[0]?.url);
+      candidates.push(data?.result?.images?.[0]?.url);
+      candidates.push(data?.data?.images?.[0]?.url);
+      candidates.push(data?.data?.image_url);
+      candidates.push(data?.data?.image?.url);
+      candidates.push(typeof data?.data?.image === 'string' ? data.data.image : null);
+      candidates.push(data?.image?.url);
+      candidates.push(data?.image?.data_uri);
+      candidates.push(data?.image?.base64);
+      const found = candidates.find(u => typeof u==='string' && u);
+      return found || '';
+    } catch(e){ return ''; }
   }
 
   // Init: show first step on load
