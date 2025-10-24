@@ -4,15 +4,45 @@ Secure chat UI and AI logo generation via Fal.ai, embedded in WordPress pages wi
 
 ## Shortcodes & Usage
 
+You can embed the plugin’s UI into any WordPress Page or Post using these shortcodes. Each shortcode renders a complete UI section. For best results, place only one of these shortcodes per page.
+
 - [agui_chat]
-  - Embeds the AG‑UI chat and pre‑chat form. Use this on a page to start the guided flow and chat.
-  - Example: create a page “Brand Wizard” and add the shortcode to the content.
+  - What it does: Renders the AG‑UI chat experience with a pre‑chat form at the top (Name, Email, Phone, Brand Idea) and a chat window that appears after submission.
+  - When to use: If you want users to share contact details before chatting, and then continue the conversation in the same page.
+  - How to use:
+    1) In WordPress, go to Pages → Add New.
+    2) Give it a title, e.g., “Brand Wizard”.
+    3) Add a Shortcode block and enter: [agui_chat]
+    4) Publish.
+  - What users see: A pre‑chat form at the top and, after submission, a chat window with suggestions and the ability to send messages or attach files.
 
 - [bm_chat]
-  - Alias for the same chat UI if you prefer a shorter name.
+  - What it does: Renders the chat UI (sidebar + message pane) without the pre‑chat form.
+  - When to use: If you prefer a direct chat interface or you already collect contact details elsewhere.
+  - How to use:
+    1) Create a new page (e.g., “AI Chat”).
+    2) Add a Shortcode block with: [bm_chat]
+    3) Publish.
+  - What users see: A modern chat interface with a conversation list panel, message area, composer, and action buttons.
 
 - [bm_ms_form]
-  - Embeds the micro‑service (MS) pre‑chat form only, suitable for collecting contact details before opening the chat elsewhere.
+  - What it does: Renders the multi‑step logo creation flow (BMMS cards) with 5 steps, including AI image generation.
+  - Steps:
+    - Step 1: Collect basic info (Name, Email, Business description).
+    - Step 2: Choose an icon foundation (Lightning, Gauge, Rocket, Custom).
+    - Step 3: Enter logo text (optional) to combine with the icon.
+    - Step 4: Generate variations via the WordPress REST route (Fal.ai primary, Agent/ FastAPI fallbacks). A small banner shows the active endpoint.
+    - Step 5: Preview the selected logo and download as PNG.
+  - How to use:
+    1) Create a new page (e.g., “Logo Maker”).
+    2) Add a Shortcode block with: [bm_ms_form]
+    3) Publish.
+  - Requirements: For AI generation, set Fal API Key/Model in Admin → AG‑UI CRM. The plugin prefers the WordPress REST path by default, reducing CORS issues.
+
+Notes
+- These shortcodes don’t currently support attributes; the UI is pre‑configured by the plugin’s settings. We can add attributes later (e.g., to hide the pre‑chat form or set a custom title) if you need them.
+- If a builder/theme caches content aggressively, shortcodes may appear delayed; clear caches and reload.
+- Place only one of these shortcodes per page to avoid ID collisions (e.g., some elements share IDs such as “suggestions”).
 
 ## Configuration (Admin → AG‑UI CRM)
 
