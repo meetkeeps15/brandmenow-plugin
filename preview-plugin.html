@@ -53,15 +53,17 @@
 
   <script>
     window.AGUiConfig = {
-      // Dummy endpoints for preview; ensure no real network is attempted
+      // Preview defaults; the local preview server may proxy to your WP when WP_ORIGIN is set
       sseUrl: '',
       wsUrl: '',
       sendUrl: '',
       wpFormEndpoint: '/wp-json/agui-chat/v1/ghl/contact',
       wpSendEndpoint: '/wp-json/agui-chat/v1/agent/send',
-      wpImageEndpoint: '',
+      wpImageEndpoint: '/wp-json/agui-chat/v1/image/generate',
       agentImageEndpoint: 'http://127.0.0.1:8000/api/fal/generate',
-      fastApiBase: 'http://127.0.0.1:8000'
+      fastApiBase: 'http://127.0.0.1:8000',
+      // Feature flag: disable non-WP fallback endpoints during preview
+      disableNonWpFallbacks: true
     };
   </script>
   <!-- BM Multi-Step Form Preview -->

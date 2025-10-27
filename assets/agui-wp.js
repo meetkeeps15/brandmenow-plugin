@@ -2865,14 +2865,32 @@
     const wp = (cfg.wpImageEndpoint || '').replace(/\/$/, '') || '/wp-json/agui-chat/v1/image/generate';
     const agent = (cfg.agentImageEndpoint || '').replace(/\/$/, '');
     const fastApi = (cfg.fastApiImageEndpoint || '').replace(/\/$/, '');
-    const endpoints = [wp, agent, fastApi].filter(Boolean);
+    let endpoints = [wp, agent, fastApi].filter(Boolean);
+
+    // Feature flag: allow disabling non-WordPress fallbacks entirely
+    const disableAgentFallbacks = !!(cfg.disableAgentFallbacks || cfg.disableNonWpFallbacks);
+    if (disableAgentFallbacks) {
+      endpoints = [wp].filter(Boolean);
+    }
 
     // Generate logos using AI across available endpoints
-    for(let i = 0; i < Math.min(n, variations.length); i++){
+    for (let i = 0; i < Math.min(n, variations.length); i++) {
       let success = false;
+      // Decide whether to include image_url (skip for localhost/.local to avoid Fal fetch failures)
+      let imageUrl = '';
+      try {
+        const idea = (st && st.selectedIdea) ? String(st.selectedIdea) : '';
+        const u = new URL(idea, window.location.origin);
+        const host = u.hostname || '';
+        const isLocal = /(localhost|127\.0\.0\.1|\.local)$/i.test(host) || !/^https?:\/\//i.test(u.toString());
+        if (!isLocal && /^https?:\/\//i.test(u.toString())) {
+          imageUrl = u.toString();
+        }
+      } catch(e) {}
+
       const payload = {
         prompt: variations[i],
-        image_url: (st && st.selectedIdea) ? st.selectedIdea : '',
+        image_url: imageUrl,
         size: '1024x1024',
         format: 'png',
         guidance_scale: 3.5,

@@ -535,6 +535,31 @@ class WP_AGUI_Chat_Plugin {
     return new WP_REST_Response(['ok'=>($code>=200 && $code<300),'code'=>$code,'data'=>$body,'contactId'=>$contactId], $code);
   }
 
+  // Helper: extract image URL from varied Fal/Agent/FastAPI response shapes
+  private function find_image_url($data) {
+    if (is_string($data) && preg_match('/^https?:\/\//', $data)) return $data;
+    $d = is_array($data) ? $data : [];
+    $candidates = [];
+    $candidates[] = $d['image_url'] ?? null;
+    $candidates[] = $d['url'] ?? null;
+    if (isset($d['image']) && is_string($d['image'])) $candidates[] = $d['image'];
+    $candidates[] = $d['data_uri'] ?? null;
+    $candidates[] = $d['dataUrl'] ?? null;
+    $candidates[] = $d['image_base64'] ?? null;
+    $candidates[] = $d['base64'] ?? null;
+    if (isset($d['images'][0]['url'])) $candidates[] = $d['images'][0]['url'];
+    if (isset($d['output']['images'][0]['url'])) $candidates[] = $d['output']['images'][0]['url'];
+    if (isset($d['result']['images'][0]['url'])) $candidates[] = $d['result']['images'][0]['url'];
+    if (isset($d['data']['images'][0]['url'])) $candidates[] = $d['data']['images'][0]['url'];
+    if (isset($d['data']['image_url'])) $candidates[] = $d['data']['image_url'];
+    if (isset($d['data']['image']['url'])) $candidates[] = $d['data']['image']['url'];
+    if (isset($d['image']['url'])) $candidates[] = $d['image']['url'];
+    if (isset($d['image']['data_uri'])) $candidates[] = $d['image']['data_uri'];
+    if (isset($d['image']['base64'])) $candidates[] = $d['image']['base64'];
+    foreach ($candidates as $u) { if (is_string($u) && $u !== '') return $u; }
+    return '';
+  }
+
   public function rest_image_generate($request){
     $params = $request->get_json_params();
     if(!$params){ $params = $request->get_body_params(); }
@@ -578,7 +603,11 @@ class WP_AGUI_Chat_Plugin {
         $code = wp_remote_retrieve_response_code($resp);
         $json = json_decode(wp_remote_retrieve_body($resp), true);
         if ($code >= 200 && $code < 300) {
-          return new WP_REST_Response(['ok' => true, 'status' => $code, 'data' => $json], $code);
+          $img = $this->find_image_url($json);
+          if ($img) {
+            return new WP_REST_Response(['ok' => true, 'status' => $code, 'data' => ['image_url' => $img]], $code);
+          }
+          // Otherwise, do not return yet—continue to fallbacks
         }
       }
     }
@@ -596,7 +625,10 @@ class WP_AGUI_Chat_Plugin {
       $json2 = json_decode(wp_remote_retrieve_body($resp2), true);
       if ($code2 >= 200 && $code2 < 300) {
         $data = isset($json2['data']) ? $json2['data'] : $json2;
-        return new WP_REST_Response(['ok' => true, 'status' => $code2, 'data' => $data], $code2);
+        $img2 = $this->find_image_url($data);
+        if ($img2) {
+          return new WP_REST_Response(['ok' => true, 'status' => $code2, 'data' => ['image_url' => $img2]], $code2);
+        }
       }
     }
   
@@ -616,7 +648,10 @@ class WP_AGUI_Chat_Plugin {
       $json3 = json_decode(wp_remote_retrieve_body($resp3), true);
       if ($code3 >= 200 && $code3 < 300) {
         $data3 = isset($json3['data']) ? $json3['data'] : $json3;
-        return new WP_REST_Response(['ok' => true, 'status' => $code3, 'data' => $data3], $code3);
+        $img3 = $this->find_image_url($data3);
+        if ($img3) {
+          return new WP_REST_Response(['ok' => true, 'status' => $code3, 'data' => ['image_url' => $img3]], $code3);
+        }
       }
     }
   
@@ -716,4 +751,3 @@ class WP_AGUI_Chat_Plugin {
 }
 
 add_action('rest_api_init', function(){ (new WP_AGUI_Chat_Plugin())->register_rest(); });
-new WP_AGUI_Chat_Plugin();
