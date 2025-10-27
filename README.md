@@ -106,3 +106,83 @@ Notes
 
 - This plugin uses Fal.ai exclusively for image generation. Agent and FastAPI are optional fallbacks for local dev.
 - For deployment, ensure WordPress and all endpoints use HTTPS to avoid mixed‑content blocking.
+
+## Quick Start: Test locally against aaas-truva and WordPress
+
+This guide helps you run the plugin UI locally, connect it to Didac’s aaas-truva app for chat (SSE/WS/send), and proxy image generation through your WordPress site.
+
+### 1) Requirements
+- Node.js 18+ (for the local preview server)
+- A local or accessible WordPress site (e.g., http://brandmenow-dev.local)
+- WordPress admin → AG‑UI CRM: set Fal API Key and Model (e.g., fal-ai/flux/schnell)
+- aaas-truva app running and reachable, with confirmed endpoints:
+  - SSE URL (streaming events)
+  - WebSocket URL (wss recommended if HTTPS)
+  - Send URL (non‑streaming POST)
+  - Optional: agentImageEndpoint (proxy image generation), FastAPI base (dev fallback)
+
+### 2) Start the aaas-truva app
+- Clone Didac’s app: `git clone https://github.com/jazzy-coding-flow/aaas-truva.git`
+- Follow that app’s README to run the server and note its endpoints (SSE/WS/send, and any image proxy routes).
+
+### 3) Run the plugin preview server in WordPress proxy mode
+PowerShell (Windows):
+```
+$env:WP_ORIGIN="http://brandmenow-dev.local"; $env:PORT="5501"; node preview-server.js
+```
+Open http://localhost:5501/
+
+What this does:
+- Serves the plugin UI locally.
+- Proxies WordPress routes like `/wp-json/agui-chat/v1/settings` and `/wp-json/agui-chat/v1/image/generate` to `WP_ORIGIN`.
+- Lets you test end‑to‑end without deploying the plugin.
+
+### 4) Configure endpoints for chat and image generation
+Edit `preview-plugin.html` and set `window.AGUiConfig`:
+```
+window.AGUiConfig = {
+  // Agent/chat endpoints (aaas-truva)
+  sseUrl: "https://your-aaas-truva-app/sse",
+  wsUrl: "wss://your-aaas-truva-app/ws",
+  sendUrl: "https://your-aaas-truva-app/api/send",
+  preferWebSocket: true,
+  forceNonStreaming: true, // set to false after SSE/WS are confirmed stable
+  fallbackUrl: "https://your-aaas-truva-app/api/ask", // optional
+
+  // Image generation endpoints
+  wpImageEndpoint: "/wp-json/agui-chat/v1/image/generate", // primary (WordPress REST)
+  agentImageEndpoint: "https://your-aaas-truva-app/api/generate", // optional fallback
+  fastApiBase: "http://127.0.0.1:8000", // optional dev fallback
+
+  // Policy flag
+  disableNonWpFallbacks: true // strict WordPress‑only testing
+};
+```
+Notes:
+- If your WordPress is HTTPS, use HTTPS/wss endpoints to avoid mixed‑content.
+- Local/relative concept images are treated as local; `image_url` won’t be sent to Fal.
+- To test fallbacks, set `disableNonWpFallbacks` to `false` and ensure the agent/FastAPI endpoints are reachable.
+
+### 5) Test the flow
+- Go to http://localhost:5501/
+- Multi‑step logo flow:
+  - Pick a concept (assets/logo-ideas).
+  - Generate variations. Confirm network requests hit `/wp-json/agui-chat/v1/image/generate` (proxied to `WP_ORIGIN`).
+  - If WordPress responds with images, they’ll render; otherwise you’ll see error feedback.
+- Chat:
+  - Send a message and confirm it uses your `sendUrl`.
+  - If streaming is enabled, confirm events over SSE/WS.
+
+### 6) Push your changes to GitHub
+Ensure remote is set to your repo and push:
+```
+git add -A
+git commit -m "Add Quick Start guide for local testing with aaas-truva and WordPress"
+git push -u origin main
+```
+
+Troubleshooting
+- WordPress REST 401/403: whitelist `/wp-json/agui-chat/v1/image/generate` in security plugins.
+- Mixed‑content: use same‑origin HTTPS + wss or rely on WordPress REST for Fal.ai calls.
+- CSP blocking `data:image/svg+xml`: allow temporarily or ensure Fal.ai connectivity.
+- CORS: whitelist your WordPress and preview server origins in aaas‑truva.
