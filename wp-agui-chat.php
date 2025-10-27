@@ -32,6 +32,9 @@ class WP_AGUI_Chat_Plugin {
       // Fal AI (server-side proxy from WordPress)
       'fal_key' => '64ea8d6d-4f33-4915-8b5d-d2c5b8d6699b:7d926dbff1d130130c1cf402efccd184',
       'fal_model' => 'fal-ai/flux/schnell',
+      // Banana.dev (primary image generation)
+      'banana_key' => '',
+      'banana_model' => '',
 
       // GoHighLevel integration defaults
       'ghl_pit' => 'pit-ca167896-6606-4d07-b042-d294e6bf8d2d',
@@ -342,8 +345,14 @@ class WP_AGUI_Chat_Plugin {
     add_settings_field('fastapi_base', 'FastAPI Base URL', [$this, 'field_text'], 'agui_crm', 'agency_api', ['key'=>'fastapi_base']);
     add_settings_field('db_token', 'Bearer Token (DB_TOKEN, optional)', [$this, 'field_text'], 'agui_crm', 'agency_api', ['key'=>'db_token']);
 
-    add_settings_section('fal_ai', 'Fal AI (Server-side)', function(){
-      echo '<p>Recommended: configure server-side Fal AI so the browser calls WordPress (same-origin HTTPS) instead of localhost. This avoids mixed-content and reachability issues.</p>';
+    add_settings_section('banana_ai', 'Banana.dev (Primary Image Generation)', function(){
+      echo '<p>Primary: configure Banana.dev for AI image generation. This will be tried first before falling back to Fal AI or local endpoints.</p>';
+    }, 'agui_crm');
+    add_settings_field('banana_key', 'Banana API Key', [$this, 'field_text'], 'agui_crm', 'banana_ai', ['key'=>'banana_key']);
+    add_settings_field('banana_model', 'Banana Model Key', [$this, 'field_text'], 'agui_crm', 'banana_ai', ['key'=>'banana_model']);
+
+    add_settings_section('fal_ai', 'Fal AI (Fallback)', function(){
+      echo '<p>Fallback: configure server-side Fal AI as a backup when Banana.dev is not available. This avoids mixed-content and reachability issues.</p>';
     }, 'agui_crm');
     add_settings_field('fal_key', 'Fal API Key', [$this, 'field_text'], 'agui_crm', 'fal_ai', ['key'=>'fal_key']);
     add_settings_field('fal_model', 'Fal Model', [$this, 'field_text'], 'agui_crm', 'fal_ai', ['key'=>'fal_model']);
@@ -535,6 +544,87 @@ class WP_AGUI_Chat_Plugin {
     return new WP_REST_Response(['ok'=>($code>=200 && $code<300),'code'=>$code,'data'=>$body,'contactId'=>$contactId], $code);
   }
 
+  // Helper: try Banana.dev image generation with polling
+  private function try_banana_generate($api_key, $model_key, $prompt, $body_arr) {
+    // Start the Banana.dev job
+    $start_url = 'https://api.banana.dev/start/v4/';
+    $start_headers = [
+      'Content-Type' => 'application/json',
+      'Authorization' => 'Bearer ' . $api_key,
+    ];
+    $start_body = [
+      'apiKey' => $api_key,
+      'modelKey' => $model_key,
+      'modelInputs' => [
+        'prompt' => $prompt,
+        'width' => 1024,
+        'height' => 1024,
+        'guidance_scale' => 7.5,
+        'num_inference_steps' => 20,
+        'seed' => rand(1, 1000000)
+      ]
+    ];
+
+    $start_resp = wp_remote_post($start_url, [
+      'headers' => $start_headers,
+      'body' => json_encode($start_body),
+      'timeout' => 30,
+    ]);
+
+    if (is_wp_error($start_resp)) {
+      return null;
+    }
+
+    $start_code = wp_remote_retrieve_response_code($start_resp);
+    $start_json = json_decode(wp_remote_retrieve_body($start_resp), true);
+
+    if ($start_code < 200 || $start_code >= 300 || !isset($start_json['callID'])) {
+      return null;
+    }
+
+    $call_id = $start_json['callID'];
+
+    // Poll for completion (max 60 seconds)
+    $check_url = 'https://api.banana.dev/check/v4/';
+    $check_headers = [
+      'Content-Type' => 'application/json',
+      'Authorization' => 'Bearer ' . $api_key,
+    ];
+    $check_body = [
+      'apiKey' => $api_key,
+      'callID' => $call_id,
+    ];
+
+    $max_attempts = 30; // 30 attempts * 2 seconds = 60 seconds max
+    for ($i = 0; $i < $max_attempts; $i++) {
+      sleep(2); // Wait 2 seconds between checks
+
+      $check_resp = wp_remote_post($check_url, [
+        'headers' => $check_headers,
+        'body' => json_encode($check_body),
+        'timeout' => 10,
+      ]);
+
+      if (is_wp_error($check_resp)) {
+        continue;
+      }
+
+      $check_code = wp_remote_retrieve_response_code($check_resp);
+      $check_json = json_decode(wp_remote_retrieve_body($check_resp), true);
+
+      if ($check_code >= 200 && $check_code < 300 && isset($check_json['finished']) && $check_json['finished']) {
+        // Job completed, extract image
+        $img_url = $this->find_image_url($check_json);
+        if ($img_url) {
+          return new WP_REST_Response(['ok' => true, 'status' => 200, 'data' => ['image_url' => $img_url]], 200);
+        }
+      }
+    }
+
+    // Timeout - job didn't complete in time
+    return null;
+  }
+
   // Helper: extract image URL from varied Fal/Agent/FastAPI response shapes
   private function find_image_url($data) {
     if (is_string($data) && preg_match('/^https?:\/\//', $data)) return $data;
@@ -578,6 +668,8 @@ class WP_AGUI_Chat_Plugin {
     $model_override = isset($params['model']) ? trim($params['model']) : '';
   
     $cfg = self::get_settings();
+    $banana_key = trim($cfg['banana_key'] ?? '');
+    $banana_model = trim($cfg['banana_model'] ?? '');
     $fal_key = trim($cfg['fal_key'] ?? (getenv('FAL_KEY') ?: ''));
     $fal_model = trim($cfg['fal_model'] ?? (getenv('FAL_MODEL') ?: 'fal-ai/flux/schnell'));
     if(!empty($model_override)) { $fal_model = $model_override; }
@@ -588,9 +680,15 @@ class WP_AGUI_Chat_Plugin {
     if($steps !== null) { $body_arr['num_inference_steps'] = $steps; }
     if($seed !== null) { $body_arr['seed'] = $seed; }
 
+    // 1) Try Banana.dev first if configured
+    if ($banana_key && $banana_model) {
+      $banana_result = $this->try_banana_generate($banana_key, $banana_model, $prompt, $body_arr);
+      if ($banana_result) {
+        return $banana_result;
+      }
+    }
 
-
-    // 1) Try Fal.ai directly if key configured
+    // 2) Fallback to Fal.ai if key configured
     if ($fal_key) {
       $url = 'https://api.fal.ai/' . ltrim($fal_model, '/');
       $headers = [
@@ -612,7 +710,7 @@ class WP_AGUI_Chat_Plugin {
       }
     }
   
-    // 2) Fallback to local agent-server proxy
+    // 3) Fallback to local agent-server proxy
     $agent_base = getenv('AGENT_BASE') ?: 'http://127.0.0.1:8787';
     $agent_url = rtrim($agent_base, '/') . '/api/fal/generate';
     $resp2 = wp_remote_post($agent_url, [
@@ -632,7 +730,7 @@ class WP_AGUI_Chat_Plugin {
       }
     }
   
-    // 3) Final fallback: local FastAPI returns SVG data URI
+    // 4) Final fallback: local FastAPI returns SVG data URI
     $fast_base = !empty($cfg['fastapi_base']) ? $cfg['fastapi_base'] : (getenv('FASTAPI_BASE') ?: 'http://127.0.0.1:8000');
     $fast_url = rtrim($fast_base, '/') . '/api/fal/generate';
     $headers_fast = [ 'Content-Type' => 'application/json' ];
@@ -655,7 +753,7 @@ class WP_AGUI_Chat_Plugin {
       }
     }
   
-    // 4) Local placeholder: return SVG data URI to avoid 502
+    // 5) Local placeholder: return SVG data URI to avoid 502
     // Allow disabling fallback via env flag DISABLE_WP_IMAGE_FALLBACK
     $disable_fallback = getenv('DISABLE_WP_IMAGE_FALLBACK');
     $disable = $disable_fallback && in_array(strtolower($disable_fallback), ['1','true','yes','on']);
@@ -750,4 +848,8 @@ class WP_AGUI_Chat_Plugin {
   }
 }
 
+// Initialize the plugin
+new WP_AGUI_Chat_Plugin();
+
+// Register REST API endpoints
 add_action('rest_api_init', function(){ (new WP_AGUI_Chat_Plugin())->register_rest(); });
