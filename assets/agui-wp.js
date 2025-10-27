@@ -252,7 +252,7 @@
     try{
       if(!u) return '';
       if(typeof u !== 'string') return '';
-      const s = u.trim();
+      const s = u.trim().replace(/^["'`]+|["'`]+$/g,''); // strip accidental quotes/backticks from endpoints or URLs
       if(/^data:image\//i.test(s)) return s; // proper data URI
       if(/^https?:\/\//i.test(s)) return s; // http/https URL
       // If it looks like raw base64, wrap it as PNG
@@ -2923,8 +2923,18 @@
           if (response.ok) {
             const result = await response.json();
             const url = extractImageUrl(result);
-            if (url && !String(url).startsWith('data:image/svg')){
-              arr.push({ id: 'ai_v' + i, dataUrl: url, prompt: variations[i] });
+            const clean = normalizeImageUrl(url);
+            if (clean && String(clean).startsWith('data:image/svg')){
+              try {
+                const png = await svgToPng(clean, 1024, 1024);
+                arr.push({ id: 'ai_v' + i, dataUrl: png, prompt: variations[i], placeholder: true });
+                success = true;
+                break; // done for this variant
+              } catch(convErr) {
+                console.warn('SVG to PNG conversion failed for variant', i, convErr);
+              }
+            } else if (clean) {
+              arr.push({ id: 'ai_v' + i, dataUrl: clean, prompt: variations[i] });
               success = true;
               break; // done for this variant
             } else {

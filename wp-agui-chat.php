@@ -30,8 +30,8 @@ class WP_AGUI_Chat_Plugin {
       'fastapi_base' => 'http://127.0.0.1:8800',
       'db_token' => '',
       // Fal AI (server-side proxy from WordPress)
-      'fal_key' => '64ea8d6d-4f33-4915-8b5d-d2c5b8d6699b:7d926dbff1d130130c1cf402efccd184',
-      'fal_model' => 'fal-ai/flux/schnell',
+      'fal_key' => '43f4b24d-deeb-4ee4-ac35-cc5d02437a7b:0eb26cf70ce9cf72da2d21ac7ff472b3',
+      'fal_model' => 'fal-ai/flux-pro/v1/fill',
       // Banana.dev (primary image generation)
       'banana_key' => '',
       'banana_model' => '',
@@ -218,7 +218,7 @@ class WP_AGUI_Chat_Plugin {
           <div class="bmms-logo-anim" aria-hidden="true">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           </div>
-          <h2 class="bmms-title">Hi, I'm Airo—your AI-powered assistant.</h2>
+          <h2 class="bmms-title">Hi, I'm your AI-powered assistant.</h2>
           <p class="bmms-sub">Let’s create a logo together.</p>
         </div>
         <div class="bmms-fields">
@@ -356,6 +356,7 @@ class WP_AGUI_Chat_Plugin {
     }, 'agui_crm');
     add_settings_field('fal_key', 'Fal API Key', [$this, 'field_text'], 'agui_crm', 'fal_ai', ['key'=>'fal_key']);
     add_settings_field('fal_model', 'Fal Model', [$this, 'field_text'], 'agui_crm', 'fal_ai', ['key'=>'fal_model']);
+
 
 
 
@@ -505,6 +506,17 @@ class WP_AGUI_Chat_Plugin {
       (isset($body['message']) && stripos($body['message'], 'duplicated') !== false) ||
       (isset($body['error']) && stripos($body['error'], 'duplicated') !== false)
     );
+
+    // NEW: If duplicate and upstream provided a contactId in meta, return OK with that ID
+    if ($isDuplicateMsg && isset($body['meta']) && isset($body['meta']['contactId']) && $body['meta']['contactId']) {
+      return new WP_REST_Response([
+        'ok' => true,
+        'code' => 200,
+        'data' => $body,
+        'contactId' => $body['meta']['contactId'],
+        'dedup' => true
+      ], 200);
+    }
 
     if (($isDuplicateMsg || !$idFromCreate) && $email) {
       $headers = [
@@ -658,7 +670,14 @@ class WP_AGUI_Chat_Plugin {
       if($raw){ $decoded = json_decode($raw, true); if(is_array($decoded)) $params = $decoded; }
     }
     $prompt = isset($params['prompt']) ? $params['prompt'] : '';
+    $prompt = is_string($prompt) ? trim($prompt) : '';
+    $prompt = trim($prompt, " \t\n\r\0\x0B\"'`");
     $image_url = isset($params['image_url']) ? $params['image_url'] : '';
+    $image_url = is_string($image_url) ? trim($image_url) : '';
+    $image_url = trim($image_url, " \t\n\r\0\x0B\"'`");
+    $mask_url = isset($params['mask_url']) ? $params['mask_url'] : '';
+    $mask_url = is_string($mask_url) ? trim($mask_url) : '';
+    $mask_url = trim($mask_url, " \t\n\r\0\x0B\"'`");
     // Optional advanced parameters for Fal models
     $size = isset($params['size']) ? $params['size'] : '1024x1024';
     $guidance = isset($params['guidance_scale']) ? floatval($params['guidance_scale']) : null;
@@ -673,64 +692,59 @@ class WP_AGUI_Chat_Plugin {
     $fal_key = trim($cfg['fal_key'] ?? (getenv('FAL_KEY') ?: ''));
     $fal_model = trim($cfg['fal_model'] ?? (getenv('FAL_MODEL') ?: 'fal-ai/flux/schnell'));
     if(!empty($model_override)) { $fal_model = $model_override; }
+    // If using a fill endpoint but mask_url is missing, fall back to a text-to-image endpoint to avoid errors
+    if (stripos($fal_model, '/fill') !== false && empty($mask_url)) {
+      $fal_model = 'fal-ai/flux-pro/v1.1';
+    }
   
     // Build request body with whitelisted parameters
-    $body_arr = [ 'prompt' => $prompt, 'image_url' => $image_url, 'size' => $size, 'format' => $format ];
+    $body_arr = [ 'prompt' => $prompt, 'size' => $size, 'format' => $format ];
+    if(!empty($image_url)) { $body_arr['image_url'] = $image_url; }
+    if(!empty($mask_url)) { $body_arr['mask_url'] = $mask_url; }
+    // Also include output_format for endpoints that expect this key
+    $body_arr['output_format'] = $format;
+    // Provide width/height when size is given as WxH
+    if (preg_match('/^(\d+)x(\d+)$/', $size, $m)) { $body_arr['width'] = intval($m[1]); $body_arr['height'] = intval($m[2]); }
     if($guidance !== null) { $body_arr['guidance_scale'] = $guidance; }
     if($steps !== null) { $body_arr['num_inference_steps'] = $steps; }
     if($seed !== null) { $body_arr['seed'] = $seed; }
 
-    // 1) Try Banana.dev first if configured
-    if ($banana_key && $banana_model) {
-      $banana_result = $this->try_banana_generate($banana_key, $banana_model, $prompt, $body_arr);
-      if ($banana_result) {
-        return $banana_result;
-      }
-    }
+    // Map to LogoGenerator expected payload for local /api/fal/generate endpoints
+    $brand_name = isset($params['brand_name']) ? $params['brand_name'] : ($params['brand'] ?? ($params['description'] ?? 'Brand'));
+    $editing = isset($params['editing']) ? (bool)$params['editing'] : false;
+    $edit_logo_input = isset($params['edit_logo_input']) ? $params['edit_logo_input'] : ($params['edit_prompt'] ?? '');
+    $logo_body = [
+      'brand_name' => $brand_name,
+      'prompt' => $prompt,
+      'editing' => $editing,
+      'logo_url' => $image_url ?: ($params['logo_url'] ?? ''),
+      'edit_logo_input' => $edit_logo_input,
+    ];
 
-    // 2) Fallback to Fal.ai if key configured
+    // 1) Fast path: Fal.ai cloud (flux/schnell) if key configured
     if ($fal_key) {
-      $url = 'https://api.fal.ai/' . ltrim($fal_model, '/');
+      // Use fal.run HTTP endpoint for Fal models
+      $url = 'https://fal.run/' . ltrim($fal_model, '/');
       $headers = [
         'Authorization' => 'Key ' . $fal_key,
         'Content-Type' => 'application/json',
         'Accept' => 'application/json',
       ];
-      $resp = wp_remote_post($url, [ 'headers' => $headers, 'body' => json_encode($body_arr), 'timeout' => 60 ]);
+      $resp = wp_remote_post($url, [ 'headers' => $headers, 'body' => json_encode($body_arr), 'timeout' => 30 ]);
       if (!is_wp_error($resp)) {
         $code = wp_remote_retrieve_response_code($resp);
         $json = json_decode(wp_remote_retrieve_body($resp), true);
         if ($code >= 200 && $code < 300) {
           $img = $this->find_image_url($json);
           if ($img) {
-            return new WP_REST_Response(['ok' => true, 'status' => $code, 'data' => ['image_url' => $img]], $code);
+            return new WP_REST_Response(['ok' => true, 'status' => $code, 'data' => ['image_url' => $img, 'model_used' => $fal_model]], $code);
           }
-          // Otherwise, do not return yet—continue to fallbacks
+          // Otherwise, continue to faster local fallbacks
         }
       }
     }
   
-    // 3) Fallback to local agent-server proxy
-    $agent_base = getenv('AGENT_BASE') ?: 'http://127.0.0.1:8787';
-    $agent_url = rtrim($agent_base, '/') . '/api/fal/generate';
-    $resp2 = wp_remote_post($agent_url, [
-      'headers' => [ 'Content-Type' => 'application/json' ],
-      'body' => json_encode($body_arr),
-      'timeout' => 60,
-    ]);
-    if (!is_wp_error($resp2)) {
-      $code2 = wp_remote_retrieve_response_code($resp2);
-      $json2 = json_decode(wp_remote_retrieve_body($resp2), true);
-      if ($code2 >= 200 && $code2 < 300) {
-        $data = isset($json2['data']) ? $json2['data'] : $json2;
-        $img2 = $this->find_image_url($data);
-        if ($img2) {
-          return new WP_REST_Response(['ok' => true, 'status' => $code2, 'data' => ['image_url' => $img2]], $code2);
-        }
-      }
-    }
-  
-    // 4) Final fallback: local FastAPI returns SVG data URI
+    // 2) FastAPI fallback (LogoGenerator)
     $fast_base = !empty($cfg['fastapi_base']) ? $cfg['fastapi_base'] : (getenv('FASTAPI_BASE') ?: 'http://127.0.0.1:8000');
     $fast_url = rtrim($fast_base, '/') . '/api/fal/generate';
     $headers_fast = [ 'Content-Type' => 'application/json' ];
@@ -738,8 +752,8 @@ class WP_AGUI_Chat_Plugin {
     if ($db_token) { $headers_fast['Authorization'] = 'Bearer ' . $db_token; }
     $resp3 = wp_remote_post($fast_url, [
       'headers' => $headers_fast,
-      'body' => json_encode($body_arr),
-      'timeout' => 30,
+      'body' => json_encode($logo_body),
+      'timeout' => 20,
     ]);
     if (!is_wp_error($resp3)) {
       $code3 = wp_remote_retrieve_response_code($resp3);
@@ -748,27 +762,59 @@ class WP_AGUI_Chat_Plugin {
         $data3 = isset($json3['data']) ? $json3['data'] : $json3;
         $img3 = $this->find_image_url($data3);
         if ($img3) {
-          return new WP_REST_Response(['ok' => true, 'status' => $code3, 'data' => ['image_url' => $img3]], $code3);
+          return new WP_REST_Response(['ok' => true, 'status' => $code3, 'data' => ['image_url' => $img3, 'model_used' => 'LogoGenerator']], $code3);
+        }
+      }
+    }
+
+    // 3) Banana.dev (short polling) if configured
+    if ($banana_key && $banana_model) {
+      $banana_result = $this->try_banana_generate($banana_key, $banana_model, $prompt, $size, $guidance, $steps, $seed);
+      if ($banana_result) {
+        return $banana_result;
+      }
+    }
+  
+    // 4) Local agent-server proxy (LogoGenerator)
+    $agent_base = getenv('AGENT_BASE') ?: 'http://127.0.0.1:8787';
+    $agent_url = rtrim($agent_base, '/') . '/api/fal/generate';
+    $resp2 = wp_remote_post($agent_url, [
+      'headers' => [ 'Content-Type' => 'application/json' ],
+      'body' => json_encode($logo_body),
+      'timeout' => 20,
+    ]);
+    if (!is_wp_error($resp2)) {
+      $code2 = wp_remote_retrieve_response_code($resp2);
+      $json2 = json_decode(wp_remote_retrieve_body($resp2), true);
+      if ($code2 >= 200 && $code2 < 300) {
+        $data = isset($json2['data']) ? $json2['data'] : $json2;
+        $img2 = $this->find_image_url($data);
+        if ($img2) {
+          return new WP_REST_Response(['ok' => true, 'status' => $code2, 'data' => ['image_url' => $img2, 'model_used' => 'AgentLogoGenerator']], $code2);
         }
       }
     }
   
     // 5) Local placeholder: return SVG data URI to avoid 502
-    // Allow disabling fallback via env flag DISABLE_WP_IMAGE_FALLBACK
-    $disable_fallback = getenv('DISABLE_WP_IMAGE_FALLBACK');
-    $disable = $disable_fallback && in_array(strtolower($disable_fallback), ['1','true','yes','on']);
-    if ($disable) {
+    // Honor both env names
+$disable_fallback_env = getenv('DISABLE_WP_IMAGE_FALLBACK');
+if ($disable_fallback_env === false || $disable_fallback_env === null) {
+  $disable_fallback_env = getenv('DISABLE_IMAGE_FALLBACK');
+}
+$disable_fallback = is_string($disable_fallback_env)
+  ? in_array(strtolower(trim($disable_fallback_env)), ['1','true','yes','on'])
+  : (bool)$disable_fallback_env;
+    if ($disable_fallback) {
       return new WP_REST_Response(['ok' => false, 'status' => 503, 'error' => 'Fal AI unavailable and image fallback disabled'], 503);
     }
     $safe_prompt = esc_html($prompt ? $prompt : 'Brand Concept');
-    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600">'
+    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="640">'
          . '<defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f0f4ff"/><stop offset="1" stop-color="#e2eafc"/></linearGradient></defs>'
          . '<rect width="100%" height="100%" fill="url(#g)"/>'
          . '<text x="50%" y="45%" text-anchor="middle" font-family="Inter,Arial" font-size="42" fill="#111" opacity="0.9">Brand Visual</text>'
          . '<text x="50%" y="58%" text-anchor="middle" font-family="Inter,Arial" font-size="28" fill="#333">' . $safe_prompt . '</text>'
          . '</svg>';
     $data_uri = 'data:image/svg+xml;charset=utf-8,' . rawurlencode($svg);
-    // Use 'image_url' to match frontend extractImageUrl expectations
     return new WP_REST_Response(['ok' => true, 'status' => 200, 'data' => ['image_url' => $data_uri, 'caption' => 'Visual concept: ' . $safe_prompt ]], 200);
   }
 
