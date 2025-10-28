@@ -2626,6 +2626,8 @@
     s4: q('#bmms-step4', root),
     s5: q('#bmms-step5', root)
   };
+  const stepOrder = ['s1','s2','s3','s4','s5'];
+  const progressEl = q('.bmms-progress', root);
   function showStep(s, fromBack = false){ 
     Object.values(steps).forEach(el=>{ if(el){ el.classList.remove('active'); el.style.display='none'; } }); 
     if(s && steps[s]){ 
@@ -2639,6 +2641,11 @@
          const bmmsFields = qa('.bmms-fields', form);
          bmmsFields.forEach(el=>{ el.style.display='block'; });
       }
+      // Update progress pill
+      try{
+        if(progressEl){ const i = stepOrder.indexOf(s); if(i>=0){ progressEl.textContent = `Step ${i+1} of ${stepOrder.length}`; } }
+      }catch(_){ }
+      // persist current step
       try{ sessionStorage.setItem('bmms_step', s); }catch(e){}
     } 
   }
