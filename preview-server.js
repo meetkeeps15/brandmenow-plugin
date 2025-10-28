@@ -122,6 +122,63 @@ const server = http.createServer(async (req,res)=>{
     return sendJson(res, 200, { ok:true, status:200, data: { image_url: dataUri } });
   }
 
+  // Contact creation endpoint (GHL stub)
+  if (pathname === '/wp-json/agui-chat/v1/ghl/contact') {
+    const body = await parseBody(req);
+    const name = body && (body.name || body.full_name || 'Guest');
+    const email = body && (body.email || 'guest@example.com');
+    const handle = body && (body.handle || '');
+    const sessionId = 'sess_' + Math.random().toString(36).slice(2,10);
+    return sendJson(res, 200, { ok:true, status:200, data:{ contact_id:'c_'+Date.now(), session_id:sessionId, name, email, handle } });
+  }
+
+  // Optional social scan stub
+  if (pathname === '/wp-json/agui-chat/v1/social/scan') {
+    const body = await parseBody(req);
+    const handle = (body && body.handle) || '';
+    const summary = handle ? `@${handle} vibes: upbeat, entrepreneurial; audience: early-stage founders; content: tips, reels, carousels.`
+                           : 'No handle provided.';
+    return sendJson(res, 200, { ok:true, status:200, data:{ handle, summary } });
+  }
+
+  // Brand name generator stub
+  if (pathname === '/wp-json/agui-chat/v1/brandname/generate') {
+    const body = await parseBody(req);
+    const seed = (body && (body.seed || body.description || 'brand'));
+    const base = seed.replace(/[^a-zA-Z0-9 ]/g,' ').trim().split(/\s+/)[0] || 'Nova';
+    const names = [ `${base} Labs`, `${base} Co`, `${base} Studio`, `${base} Works`, `${base} Forge`, `${base} Hub` ];
+    const suggestions = names.map(n => ({ name:n, avail:{ domain: Math.random()>0.4, instagram: Math.random()>0.4 } }));
+    return sendJson(res, 200, { ok:true, status:200, data:{ suggestions } });
+  }
+
+  // Top products/SKUs stub
+  if (pathname === '/wp-json/agui-chat/v1/products/top') {
+    const body = await parseBody(req);
+    const cat = (body && body.category) || 'Drinkware';
+    const mkSvg = (title)=> 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"400\"><rect width=\"100%\" height=\"100%\" fill=\"#eef2ff\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" font-size=\"22\" font-family=\"Inter,Arial\">${title}</text></svg>`);
+    const items = [
+      { id:'sku1', title:`${cat} Pro`, blurb:'Premium quality, durable finish', image_url: mkSvg(`${cat} Pro`) },
+      { id:'sku2', title:`${cat} Lite`, blurb:'Budget-friendly, great value', image_url: mkSvg(`${cat} Lite`) },
+      { id:'sku3', title:`${cat} Max`, blurb:'Largest size, bold presence', image_url: mkSvg(`${cat} Max`) }
+    ];
+    return sendJson(res, 200, { ok:true, status:200, data:{ items } });
+  }
+
+  // Calendar slots stub (GHL)
+  if (pathname === '/wp-json/agui-chat/v1/ghl/slots') {
+    const now = Date.now();
+    const day = 24*60*60*1000;
+    const slots = [1,2,3,4,5].map(i => ({ id:'slot'+i, time: new Date(now + i*day).toISOString().slice(0,16).replace('T',' ') }));
+    return sendJson(res, 200, { ok:true, status:200, data:{ slots } });
+  }
+
+  // Book a slot stub (GHL)
+  if (pathname === '/wp-json/agui-chat/v1/ghl/book') {
+    const body = await parseBody(req);
+    const slotId = (body && body.slot_id) || 'slot1';
+    return sendJson(res, 200, { ok:true, status:200, data:{ booking_id:'b_'+Date.now(), slot_id: slotId, message:'Booked! A confirmation email was sent.' } });
+  }
+
   // Serve static files
   let filePath = path.join(ROOT, pathname === '/' ? '/preview-plugin.html' : pathname);
   try{
