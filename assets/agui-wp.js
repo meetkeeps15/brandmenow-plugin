@@ -2639,16 +2639,40 @@
          const bmmsFields = qa('.bmms-fields', form);
          bmmsFields.forEach(el=>{ el.style.display='block'; });
       }
+      try{ sessionStorage.setItem('bmms_step', s); }catch(e){}
     } 
   }
   const state = { name:'', email:'', description:'', icon:'gauge', brand_text:'', slides:[], selected:null };
+  // persistence helpers
+  const STORAGE_KEY = 'bmms_state';
+  function saveState(){ try{ sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
+  function restore(){
+    try{
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if(raw){ const s = JSON.parse(raw); if(s && typeof s === 'object') Object.assign(state, s); }
+      const stepSaved = sessionStorage.getItem('bmms_step');
+      if(stepSaved && steps[stepSaved]){ showStep(stepSaved); } else { showStep('s1'); }
+    }catch(e){ showStep('s1'); }
+  }
+  async function createContact(payload){
+    const cfg = window.AGUiConfig || window.AGConfig || {};
+    const endpoint = (cfg.wpFormEndpoint||'/wp-json/agui-chat/v1/ghl/contact');
+    const resp = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning':'true' }, body: JSON.stringify(payload||{}) });
+    const j = await resp.json().catch(()=>({}));
+    if(!resp.ok || j.ok === false){ throw new Error('Contact creation failed'); }
+    const data = j.data || j;
+    state.contact_id = data.contact_id || '';
+    state.session_id = data.session_id || '';
+    saveState();
+    return data;
+  }
   
   // Close button hides the overlay
   /* bmms-close removed per request */
 
   // Step 1 submit
   const form1 = steps.s1; if(form1){
-    form1.addEventListener('submit', function(ev){ ev.preventDefault();
+    form1.addEventListener('submit', async function(ev){ ev.preventDefault();
       state.name = q('input[name="name"]', form1)?.value?.trim()||'';
       state.email = q('input[name="email"]', form1)?.value?.trim()||'';
       // description is required
@@ -2659,6 +2683,18 @@
         if(descInput){ descInput.focus(); }
         return;
       }
+      // call contact creation endpoint before proceeding
+      const btn = form1.querySelector('button[type="submit"]');
+      if(btn){ btn.disabled = true; btn.textContent = 'Starting…'; }
+      try{
+        await createContact({ name: state.name, email: state.email, handle: '', description: state.description });
+      }catch(e){
+        showInlineError(form1, 'Could not start session. Please try again.');
+        if(btn){ btn.disabled = false; btn.textContent = 'Get Started'; }
+        return;
+      }
+      saveState();
+      if(btn){ btn.disabled = false; btn.textContent = 'Get Started'; }
       showStep('s2');
       setTimeout(()=>{ const sp=q('.bmms-splash', steps.s2); if(sp) sp.style.display='none'; const ops=q('.bmms-options', steps.s2); if(ops){ ops.style.display=''; ops.classList.add('show'); } }, 900);
     });
@@ -3037,7 +3073,7 @@
   }
 
   // Init: show first step on load
-  showStep('s1');
+  restore();
 })();
 
    })();
