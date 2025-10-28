@@ -2624,9 +2624,13 @@
     s2: q('#bmms-step2', root),
     s3: q('#bmms-step3', root),
     s4: q('#bmms-step4', root),
-    s5: q('#bmms-step5', root)
+    s5: q('#bmms-step5', root),
+    s6: q('#bmms-step6', root),
+    s7: q('#bmms-step7', root),
+    s8: q('#bmms-step8', root),
+    s9: q('#bmms-step9', root)
   };
-  const stepOrder = ['s1','s2','s3','s4','s5'];
+  const stepOrder = ['s1','s2','s3','s4','s5','s6','s7','s8','s9'];
   const progressEl = q('.bmms-progress', root);
   function showStep(s, fromBack = false){ 
     Object.values(steps).forEach(el=>{ if(el){ el.classList.remove('active'); el.style.display='none'; } }); 
@@ -2641,6 +2645,21 @@
          const bmmsFields = qa('.bmms-fields', form);
          bmmsFields.forEach(el=>{ el.style.display='block'; });
       }
+      // Show Step 6 fields (hide splash)
+      if(s === 's6'){
+        const sp = q('.bmms-splash', steps.s6);
+        const fld = q('.bmms-fields', steps.s6);
+        setTimeout(()=>{ if(sp) sp.style.display='none'; if(fld) fld.style.display=''; }, 600);
+      }
+      // Update Selected Styles summary when entering Step 3
+      if(s === 's3'){
+        const stylesEl = q('#bmms-selected-styles', steps.s3);
+        if(stylesEl){
+          const styles = (state.styles||[]).join(', ');
+          stylesEl.textContent = styles ? `Selected styles: ${styles}` : '';
+          stylesEl.style.display = styles ? '' : 'none';
+        }
+      }
       // Update progress pill
       try{
         if(progressEl){ const i = stepOrder.indexOf(s); if(i>=0){ progressEl.textContent = `Step ${i+1} of ${stepOrder.length}`; } }
@@ -2649,7 +2668,38 @@
       try{ sessionStorage.setItem('bmms_step', s); }catch(e){}
     } 
   }
-  const state = { name:'', email:'', description:'', icon:'gauge', brand_text:'', slides:[], selected:null };
+  const state = { name:'', email:'', description:'', icon:'gauge', brand_text:'', slides:[], selected:null, styles:[] };
+
+  // Logo style seeds mapping and combiner
+  const stylePromptSeeds = {
+    'Futuristic': { prompt: 'Create a sleek, tech-forward logo using gradients, neon hues, and streamlined shapes. Should evoke innovation and cutting-edge aesthetics.', guide: 'glowing effects, geometric lines, metallic/dark backgrounds, dynamic motion elements.' },
+    'Elegant': { prompt: 'Design a refined, graceful logo with flowing script fonts and gold or pastel accents. Emphasize sophistication and luxury.', guide: 'delicate typography, high contrast, fine lines, serif or script.' },
+    'Corporate': { prompt: 'Professional, trustworthy, clean modern aesthetic with a strong icon.', guide: 'blue/gray palette, sans-serif, bold minimal icon.' },
+    'Classic': { prompt: 'Timeless, authoritative, vintage typography.', guide: 'ornamental borders, serif, gold/black or B/W, emblem layout.' },
+    'Geometric': { prompt: 'Clean abstract logo using sharp, symmetrical forms.', guide: 'polygonal/isometric elements, limited palette, balanced proportions.' },
+    'Abstract': { prompt: 'Fluid shapes and dynamic non-literal forms representing creativity.', guide: 'blended colors, organic curves, overlapping layers.' },
+    'Hand-draw': { prompt: 'Handmade, sketch-style with natural imperfection.', guide: 'ink/pencil textures, earthy tones, expressive lines.' },
+    'Mascot': { prompt: 'Friendly illustrated character that’s playful and memorable.', guide: 'bold outlines, vibrant colors, cartoon proportions.' },
+    'Minimalist': { prompt: 'Stripped-down essentials; clean and functional.', guide: 'monochrome, whitespace, sans-serif, icon focus.' },
+    'Symbolic': { prompt: 'Meaningful symbol representing values/ideas.', guide: 'geometric/metaphoric shapes, line-based.' },
+    'Vintage': { prompt: 'Retro-inspired with classic type and ornamental detail.', guide: 'badge/stamp layout, textured fonts, muted palette.' },
+    'Art Deco': { prompt: '1920s-inspired symmetry and luxe styling.', guide: 'gold/black, intricate linework, bold uppercase type.' },
+    'Grunge': { prompt: 'Rough, edgy with distressed textures.', guide: 'grungy fonts, splatter, dark/muted colors.' },
+    'Modern': { prompt: 'Clean, forward-looking, tech-influenced minimalism.', guide: 'flat/semi-flat, smooth gradients, blue tones.' },
+    'Nature': { prompt: 'Organic, eco-friendly elements (leaves/animals).', guide: 'green/earth tones, soft curves, natural motifs.' },
+    'Monogram': { prompt: 'Stylized letter-based/initials logo.', guide: 'interlocking letters, serif/calligraphic, gold/black, symmetry.' },
+    'Line Art': { prompt: 'Outline-based, clean continuous lines.', guide: 'single-weight strokes, minimal shading.' }
+  };
+  function buildStyleSeeds(styles){
+    const chosen = (Array.isArray(styles) ? styles : []).filter(Boolean).slice(0,3);
+    if(chosen.length === 0) return '';
+    const parts = chosen.map((name, i)=>{
+      const s = stylePromptSeeds[name];
+      const weight = [1.0, 0.7, 0.5][i] || 0.3;
+      return `${name} style (${weight}): ${s?.prompt||''} Guidance: ${s?.guide||''}`;
+    });
+    return `Incorporate style guidance: ${parts.join(' | ')}`;
+  }
   // persistence helpers
   const STORAGE_KEY = 'bmms_state';
   function saveState(){ try{ sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
@@ -2673,6 +2723,24 @@
     saveState();
     return data;
   }
+
+  // New: send a GHL tag to mark assets ready
+  async function sendGhlTag(tagName, meta){
+    const cfg = window.AGUiConfig || window.AGConfig || {};
+    const endpoint = (cfg.wpTagEndpoint || '/wp-json/agui-chat/v1/ghl/tag');
+    const payload = {
+      contact_id: state.contact_id || '',
+      email: state.email || '',
+      tag: tagName || 'AGUI_AssetsReady',
+      meta: meta || {}
+    };
+    try{
+      const resp = await fetch(endpoint, { method:'POST', headers:{ 'Content-Type':'application/json', 'ngrok-skip-browser-warning':'true' }, body: JSON.stringify(payload) });
+      const j = await resp.json().catch(()=>({}));
+      if(!resp.ok || j.ok === false){ console.warn('GHL tag failed', resp.status, j); return false; }
+      return true;
+    }catch(err){ console.warn('GHL tag error', err); return false; }
+  }
   
   // Close button hides the overlay
   /* bmms-close removed per request */
@@ -2695,6 +2763,8 @@
       if(btn){ btn.disabled = true; btn.textContent = 'Starting…'; }
       try{
         await createContact({ name: state.name, email: state.email, handle: '', description: state.description });
+        // Tag contact for Step 1 completion in GHL
+        await sendGhlTag('step1', { step: 's1', name: state.name, description: state.description });
       }catch(e){
         showInlineError(form1, 'Could not start session. Please try again.');
         if(btn){ btn.disabled = false; btn.textContent = 'Get Started'; }
@@ -2745,42 +2815,137 @@
         });
       }, 0);
     }
-    renderLogoIdeasOptions();
+    /* Logo ideas removed (minimal UI) */
 
     s2.addEventListener('click', function(e){
       const t = e.target;
       if(t.closest('.bmms-back')){ showStep('s1', true); return; }
+
+      // Style selection (multi-select up to 3)
+      if(t.closest('.bmms-style-btn')){
+        const btn = t.closest('.bmms-style-btn');
+        const name = btn?.dataset?.style || '';
+        if(!name) return;
+        const idx = state.styles.indexOf(name);
+        if(idx >= 0){ state.styles.splice(idx,1); btn.classList.remove('active'); }
+        else {
+          if(state.styles.length >= 3){ showInlineError(s2, 'You can pick up to 3 styles.'); return; }
+          state.styles.push(name); btn.classList.add('active');
+        }
+        saveState();
+        return;
+      }
+
       if(t.closest('.bmms-next')){
-        // Capture selected icon choice (if present)
-        const checkedIcon = q('input[name="bmms_icon"]:checked', s2);
-        state.icon = checkedIcon?.value || state.icon || 'modern';
-        const checked = q('input[name="bmms_logoidea"]:checked', s2);
-        if(!checked){
-          showInlineError(s2, 'Please select a logo idea to continue.');
+        // Optional social summary if handle provided
+        const handle = q('input[name="social_handle"]', s2)?.value?.trim()||'';
+        const summaryEl = q('.bmms-social-summary', s2);
+        if(handle && summaryEl && !state._socialSummarized){
+          summaryEl.style.display='block';
+          summaryEl.textContent = `Scanning ${handle}… audience ~growth-focused, engagement moderate; tone: upbeat, informative.`;
+          state._socialSummarized = true; saveState();
+          // brief pause before proceeding
+          setTimeout(()=>{ t.click(); }, 800);
           return;
         }
-        // Ensure absolute URL for image foundation
-        let val = checked.value || '';
-        try {
-          if (!/^https?:\/\//i.test(val)) {
-            val = new URL(val, window.location.origin).href;
-          }
-        } catch(e) {}
-        state.selectedIdea = val;
+        // Capture selected icon choice (legacy; optional)
+        const checkedIcon = q('input[name="bmms_icon"]:checked', s2);
+        state.icon = checkedIcon?.value || state.icon || 'modern';
+        // Skip concept selection; proceed with styles only
+        state.selectedIdea = '';
+        try{ sendGhlTag('step2', { step: 's2', styles:(state.styles||[]), icon:(state.icon||'') }); }catch(_){}
         showStep('s3');
-        setTimeout(()=>{ const sp=q('.bmms-splash', steps.s3); if(sp) sp.style.display='none'; const fld=q('.bmms-fields', steps.s3); if(fld) fld.style.display=''; }, 900);
+        setTimeout(()=>{
+          const sp=q('.bmms-splash', steps.s3); if(sp) sp.style.display='none';
+          const fld=q('.bmms-fields', steps.s3); if(fld) fld.style.display='';
+          const desc=q('textarea[name="brand_desc"]', steps.s3);
+           if(desc && !desc.value){
+             const styles = (state.styles||[]).join(', ');
+             if(styles){ desc.value = `Brand vibe: ${styles}. Aim for clean, minimalist, modern. Keep typography legible and spacing balanced.`; }
+           }
+          const stylesEl = q('#bmms-selected-styles', steps.s3);
+          if(stylesEl){
+            const styles = (state.styles||[]).join(', ');
+            stylesEl.textContent = styles ? `Selected styles: ${styles}` : '';
+            stylesEl.style.display = styles ? '' : 'none';
+          }
+        }, 900);
       }
     });
   }
 
   // Step 3
   const s3 = steps.s3; if(s3){
+    function renderNameOptions(list){
+      const host = q('.bmms-name-options', s3); if(!host) return;
+      host.innerHTML = '';
+      list.forEach((nm)=>{
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'bmms-btn bmms-name-choice';
+        btn.textContent = nm;
+        btn.addEventListener('click', ()=>{
+          const inp = q('input[name="brand_text"]', s3); if(inp){ inp.value = nm; }
+          host.style.display='none';
+        });
+        host.appendChild(btn);
+      });
+      host.style.display = list.length ? '' : 'none';
+    }
+    // Improved generator: uses brand_text and brand_desc to build relevant suggestions and handle uppercase words
+    function splitNameParts(name){
+      return (name || '').match(/[A-Z]?[a-z]+|[0-9]+/g) || [];
+    }
+    function generateNames(){
+      // Read latest brand description and current name input; avoid stale state
+      const desc = (q('textarea[name="brand_desc"]', s3)?.value?.trim() || '').toLowerCase();
+      const currentRaw = (q('input[name="brand_text"]', s3)?.value?.trim() || '');
+      const baseWords = ((desc.match(/[a-zA-Z]{3,}/g) || []).slice(0,3));
+      const nameParts = splitNameParts(currentRaw);
+      const roots = nameParts.length ? nameParts : (baseWords.length ? baseWords : ['brand']);
+      const suffixes = ['Labs','Works','Co','Hub','Craft','Prime','Nova','Forge','Pulse','Nest','Studio','Flow','Spark','Mint','Rise'];
+      const prefixes = ['Swift','Ultra','Neo','Blue','Bright','True','Peak','Alpha','Vivid','Aero','Zen','Clear'];
+      const tweaks = ['ly','io','ify','ster','matic','scape'];
+      const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+      const combos = new Set();
+      const host = q('.bmms-name-options', s3); if(host){ host.style.display=''; host.innerHTML=''; }
+      // If user entered a name, prioritize tweaks based on it
+      if(currentRaw){
+        const base = nameParts.length ? nameParts.map(cap).join('') : cap(currentRaw);
+        combos.add(base);
+        if(nameParts.length >= 2){ combos.add(cap(nameParts[0]) + cap(nameParts[1])); }
+        tweaks.forEach(t=>{ combos.add(cap(nameParts[0] || roots[0]) + t); });
+      }
+      // Prefix/suffix combos (fill up to 12 suggestions)
+      for(let i=0;i<suffixes.length && combos.size<12;i++){
+        const r = roots[i % roots.length] || 'brand';
+        const sfx = suffixes[(i*2) % suffixes.length];
+        combos.add(cap(r) + sfx);
+      }
+      for(let i=0;i<prefixes.length && combos.size<12;i++){
+        const pfx = prefixes[i % prefixes.length];
+        const r = roots[(i+1) % roots.length] || 'brand';
+        combos.add(pfx + cap(r));
+      }
+      const list = Array.from(combos).slice(0,8);
+      renderNameOptions(list);
+    }
+
     s3.addEventListener('click', function(e){
       const t = e.target;
       if(t.closest('.bmms-back')){ showStep('s2'); return; }
-      if(t.closest('.bmms-skip')){ state.brand_text=''; showStep('s4'); buildVariations(); return; }
-      if(t.closest('.bmms-next')){ state.brand_text = q('input[name="brand_text"]', s3)?.value?.trim()||''; showStep('s4'); buildVariations(); }
+      if(t.closest('.bmms-generate')){ generateNames(); return; }
+      if(t.closest('.bmms-next')){ state.brand_text = q('input[name="brand_text"]', s3)?.value?.trim()||''; try{ sendGhlTag('step3', { step:'s3', brand_text: state.brand_text||'' }); }catch(_){} showStep('s4'); buildVariations(); }
     });
+    // Pressing Enter in brand name input also triggers suggestions
+    const nameInput = q('input[name="brand_text"]', s3);
+    if(nameInput){
+      nameInput.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          generateNames();
+        }
+      });
+    }
   }
 
   // Step 4
@@ -2792,26 +2957,64 @@
     
     // Show loading state
     wrap.innerHTML = '<div style="text-align: center; padding: 40px; color: #6b7280;">Generating AI logos...</div>';
-    
+
+    // Prepare progressive grid + status badge
+    const badge = document.createElement('div');
+    badge.className = 'bmms-progress-hint';
+    badge.style.cssText = 'margin: 8px 0 12px; font-size: 13px; color: #6b7280;';
+    badge.textContent = 'Showing results as they arrive… 0/6';
+
+    const grid = document.createElement('div');
+    grid.className = 'bmms-grid';
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(3, minmax(160px, 1fr))';
+    grid.style.gap = '16px';
+    wrap.innerHTML = '';
+    wrap.appendChild(badge);
+    wrap.appendChild(grid);
+
+    state.selected = null;
+    state.slides = []; // deprecated in grid mode, keep for compatibility
+    state.variants = [];
+
+    function appendCard(v){
+      const card=document.createElement('div'); card.className='bmms-card'; card.setAttribute('role','button'); card.setAttribute('aria-pressed','false'); card.setAttribute('tabindex','0');
+      const img=new Image(); img.src=v.dataUrl; img.alt='Logo option'; card.appendChild(img);
+      const footer=document.createElement('div'); footer.className='bmms-card-footer';
+      footer.textContent = (v.prompt ? 'AI Variation' : (v.id==='idea_local' ? 'Selected Concept' : 'Option'));
+      card.appendChild(footer);
+      const selBadge=document.createElement('div'); selBadge.className='bmms-selected-badge'; selBadge.textContent='Selected'; selBadge.style.display='none'; card.appendChild(selBadge);
+      const updateSelectionUI = (selected)=>{
+        card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        if(selected){ card.classList.add('selected'); selBadge.style.display=''; } else { card.classList.remove('selected'); selBadge.style.display='none'; }
+      };
+      if(state.selected && state.selected.id===v.id){ updateSelectionUI(true); }
+      const selectThis = ()=>{
+        state.selected=v;
+        const nextBtnEl = q('.bmms-next', s4); if(nextBtnEl) nextBtnEl.disabled = !state.selected;
+        qsa('.bmms-card', s4).forEach(c=>{
+          c.classList.remove('selected');
+          const b=q('.bmms-selected-badge', c); if(b) b.style.display='none';
+          c.setAttribute('aria-pressed','false');
+        });
+        updateSelectionUI(true);
+      };
+      card.addEventListener('click', selectThis);
+      card.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); selectThis(); }});
+      grid.appendChild(card);
+    }
+
     try {
-      let variants = await createVariants(12, state);
-      const total = variants.length;
-      if(total === 0){
+      // Generate 6 variants quickly with concurrency and progressive rendering
+      let done = 0; const total = 6;
+      let variants = await createVariants(total, state, (v)=>{ state.variants.push(v); appendCard(v); done++; badge.textContent = `Showing results as they arrive… ${done}/${total}`; });
+      if(!variants || variants.length === 0){
         wrap.innerHTML = '<div class="bmms-empty">No AI logos were generated. Please check your image generation endpoint or Fal.ai configuration, then retry.</div><div class="bmms-actions"><button class="bmms-btn bmms-btn-primary bmms-retry" type="button">Retry</button></div>';
         return;
       }
-      state.slides = [ variants.slice(0,4), variants.slice(4,8), variants.slice(8,12) ];
-      state.selected = null;
-      let idx = 0;
-      if(nextBtn) nextBtn.disabled = total === 0 || !state.selected;
-      function render(){ wrap.innerHTML=''; const slide=document.createElement('div'); slide.className='bmms-slide';
-        state.slides[idx].forEach(v=>{ const card=document.createElement('div'); card.className='bmms-card'; const img=new Image(); img.src=v.dataUrl; img.alt='Logo option'; card.appendChild(img); const footer=document.createElement('div'); footer.className='bmms-card-footer'; footer.textContent = (v.prompt ? 'AI Variation' : (v.id==='idea_local' ? 'Selected Concept' : 'Option')); card.appendChild(footer); if(state.selected && state.selected.id===v.id){ card.classList.add('selected'); } card.addEventListener('click', ()=>{ state.selected=v; const nextBtn = q('.bmms-next', s4); if(nextBtn) nextBtn.disabled = !state.selected; render(); }); slide.appendChild(card); });
-        wrap.appendChild(slide);
-      }
-      render();
-      const prev = q('.bmms-slide-nav.prev', s4); const next = q('.bmms-slide-nav.next', s4);
-      if(prev){ prev.onclick=()=>{ idx=(idx+state.slides.length-1)%state.slides.length; render(); }; }
-      if(next){ next.onclick=()=>{ idx=(idx+1)%state.slides.length; render(); }; }
+      // Ensure state holds the final list and mark complete
+      state.variants = variants;
+      badge.textContent = `Ready: ${variants.length}/${total}`;
     } catch(error) {
       console.error('Failed to generate logo variations:', error);
       wrap.innerHTML = '<div class="bmms-empty error">Failed to generate logos. Please try again.</div><div class="bmms-actions"><button class="bmms-btn bmms-btn-primary bmms-retry" type="button">Retry</button></div>';
@@ -2825,7 +3028,7 @@
     s4.addEventListener('click', function(e){
       const t=e.target;
       if(t.closest('.bmms-back')){ showStep('s3'); return; }
-      if(t.closest('.bmms-next')){ showStep('s5'); finalize(); return; }
+      if(t.closest('.bmms-next')){ try{ sendGhlTag('step4', { step:'s4', selected_id: state.selected?.id || '', hasSelection: !!state.selected }); }catch(_){} showStep('s5'); finalize(); return; }
       if(t.closest('.bmms-retry')){ buildVariations(); return; }
     });
   }
@@ -2837,11 +3040,156 @@
     s5.addEventListener('click', function(e){
       const t=e.target;
       if(t.closest('.bmms-back')){ showStep('s4'); return; }
+      if(t.closest('.bmms-next')){ showStep('s6'); return; }
       if(t.closest('.bmms-zoom')){ const ov=q('.bmms-zoom-overlay', s5); const zi=q('#bmms-zoom-image', s5); const fin=q('#bmms-final-image', s5); if(ov && zi && fin){ zi.src=fin.src; ov.style.display='flex'; } }
       if(t.closest('.bmms-zoom-close')){ const ov=q('.bmms-zoom-overlay', s5); if(ov) ov.style.display='none'; }
       if(t.closest('.bmms-download')){ const fin=q('#bmms-final-image', s5); const src=fin?.src||''; if(src.startsWith('data:image/svg')){ svgToPng(src, 1200, 900).then(png=>download(png,'brand-logo.png')); } else { download(src,'brand-logo.png'); } }
     });
   }
+
+  // Step 6: Product selection
+  const s6 = steps.s6; if(s6){
+    const skuHost = q('.bmms-sku-list', s6);
+    const nextBtn = q('.bmms-next', s6);
+    const catGrid = q('.bmms-category-grid', s6);
+    const skuMap = {
+      'Energy': [ {id:'EN001', name:'Energy Drink – Citrus', img:'energy_citrus.jpg'}, {id:'EN002', name:'Energy Shot – Berry', img:'energy_shot.jpg'} ],
+      'Beauty': [ {id:'BE001', name:'Face Serum – Glow', img:'serum_glow.jpg'}, {id:'BE002', name:'Lip Balm – Mint', img:'lip_mint.jpg'} ],
+      'Fitness': [ {id:'FI001', name:'Protein – Vanilla', img:'protein_vanilla.jpg'}, {id:'FI002', name:'Electrolytes – Lemon', img:'electro_lemon.jpg'} ],
+      'Pets': [ {id:'PE001', name:'Pet Shampoo – Gentle', img:'pet_shampoo.jpg'} ],
+      'Outdoor': [ {id:'OU001', name:'Hydration Bottle – 32oz', img:'bottle.jpg'} ],
+      'Home': [ {id:'HO001', name:'Scented Candle – Ocean', img:'candle_ocean.jpg'} ]
+    };
+    function renderSkus(cat){ if(!skuHost) return; skuHost.innerHTML=''; const list=skuMap[cat]||[]; if(list.length){ skuHost.style.display=''; } else { skuHost.style.display='none'; }
+      list.forEach(sku=>{ const btn=document.createElement('button'); btn.type='button'; btn.className='bmms-btn bmms-sku'; btn.textContent=`${sku.name}`; btn.dataset.sku = sku.id; btn.addEventListener('click', ()=>{ state.productSku = sku.id; state.productName = sku.name; if(nextBtn) nextBtn.disabled = false; }); skuHost.appendChild(btn); }); }
+    if(catGrid){ catGrid.addEventListener('click', function(e){ const b=e.target.closest('.bmms-cat'); if(!b) return; const cat=b.dataset.cat; state.productCategory=cat; renderSkus(cat); }); }
+    s6.addEventListener('click', function(e){ const t=e.target; if(t.closest('.bmms-back')){ showStep('s5'); return; } if(t.closest('.bmms-next')){ showStep('s7'); setTimeout(()=>{ const sp=q('.bmms-splash', s7); if(sp) sp.style.display='none'; const fin=q('.bmms-final', s7); if(fin) fin.style.display=''; const prev=q('#bmms-nudge-preview', s7); const src=q('#bmms-final-image')?.src||''; if(prev&&src) prev.src=src; }, 900); } });
+  }
+
+  // Step 7: Preview nudges
+  const s7 = steps.s7; if(s7){
+    s7.addEventListener('click', function(e){ const t=e.target; if(t.closest('.bmms-back')){ showStep('s6'); return; } const img = q('#bmms-nudge-preview', s7); if(!img) return; const style = img.style; if(t.closest('.bmms-nudge-up')){ const top=(parseInt(style.marginTop||'0',10)||0) - 6; style.marginTop = top+'px'; }
+      if(t.closest('.bmms-nudge-down')){ const top=(parseInt(style.marginTop||'0',10)||0) + 6; style.marginTop = top+'px'; }
+      if(t.closest('.bmms-nudge-bigger')){ const w=(parseInt(style.width||'0',10)||0) || img.naturalWidth; style.width = ((w*1.06)|0)+'px'; }
+      if(t.closest('.bmms-nudge-smaller')){ const w=(parseInt(style.width||'0',10)||0) || img.naturalWidth; style.width = ((w/1.06)|0)+'px'; }
+      if(t.closest('.bmms-nudge-bg')){ img.classList.toggle('alt-bg'); }
+      if(t.closest('.bmms-next')){ showStep('s8'); setTimeout(()=>{ const sp=q('.bmms-splash', s8); if(sp) sp.style.display='none'; const fld=q('.bmms-fields', s8); if(fld) fld.style.display=''; const fInp=q('input[name="followers"]', s8); if(fInp){ fInp.value = fInp.value || '10000'; } const cInp=q('input[name="conv"]', s8); if(cInp){ cInp.value = cInp.value || '2'; } updateProfit(); }, 900); }
+    });
+  }
+
+  function updateProfit(){ const s8 = steps.s8; if(!s8) return; const f=Number(q('input[name="followers"]', s8)?.value||0); const conv=Number(q('input[name="conv"]', s8)?.value||2)/100; const price=Number(q('input[name="price"]', s8)?.value||19); const margin=Number(q('input[name="margin"]', s8)?.value||50)/100; const buyers = Math.round(f * conv); const revenue = buyers * price; const profit = Math.round(revenue * margin); const host=q('.bmms-profit-result', s8); if(host){ host.textContent = `Estimated buyers: ${buyers} • Revenue: $${revenue.toLocaleString()} • Profit: $${profit.toLocaleString()}`; } }
+  // Step 8 handlers
+  const s8 = steps.s8; if(s8){ s8.addEventListener('input', function(e){ updateProfit(); }); s8.addEventListener('click', function(e){ const t=e.target; if(t.closest('.bmms-back')){ showStep('s7'); return; } if(t.closest('.bmms-next')){ showStep('s9'); setTimeout(()=>{ const sp=q('.bmms-splash', s9); if(sp) sp.style.display='none'; const fld=q('.bmms-fields', s9); if(fld) fld.style.display=''; prepareCalendarPrefill(); }, 900); } }); }
+
+  // Calendar prefill helpers
+  function buildAdditionalInfo(){
+    const parts = [];
+    try{ if(state.selected && state.selected.dataUrl){ parts.push('Selected image: ' + String(state.selected.dataUrl).slice(0,80) + '...'); } }catch(_){}
+    if(state.name){ parts.push('Name: ' + state.name); }
+    // email intentionally omitted from Additional Information
+    if(Array.isArray(state._variationPrompts) && state._variationPrompts.length){
+      parts.push('Prompts: ' + state._variationPrompts.map(p=> String(p).replace(/\s+/g,' ').slice(0,180)).join(' | '));
+    }
+    return parts.join('\n');
+  }
+  function prepareCalendarPrefill(){
+    const s9El = steps.s9 || s9; const cal = s9El ? q('.bmms-ghl-calendar', s9El) : null; if(!cal) return;
+    const iframe = cal.querySelector('iframe');
+    // Hide Confirm button (calendar handles booking)
+    const confirmBtn = q('.bmms-fields .bmms-actions .bmms-btn-primary', s9El);
+    if(confirmBtn){ confirmBtn.style.display='none'; }
+    const backBtn = q('.bmms-fields .bmms-actions .bmms-back', s9El);
+    if(backBtn){ backBtn.style.display='none'; }
+    // Pass additional info to GHL via URL param (best-effort)
+    try{
+      const info = buildAdditionalInfo();
+      if(iframe){
+        const originalSrc = iframe.src;
+        const lcCfg = window.BMMS_CALENDAR_CFG || {};
+        const enableLeadConnector = (typeof lcCfg.useLeadConnector === 'boolean' ? lcCfg.useLeadConnector : true) || (iframe.dataset && iframe.dataset.useLeadConnector === 'true');
+
+        const setCommonParams = (url) => {
+          const fullName = (state.name || '').trim();
+          const email = (state.email || '').trim();
+
+          if(fullName){
+            url.searchParams.set('name', fullName);
+            url.searchParams.set('fullName', fullName);
+            url.searchParams.set('full_name', fullName);
+            url.searchParams.set('prefill_name', fullName);
+            url.searchParams.set('contact[name]', fullName);
+            const parts = fullName.split(/\s+/);
+            const first = parts[0] || '';
+            const last = parts.slice(1).join(' ') || '';
+            if(first){ url.searchParams.set('first_name', first); url.searchParams.set('firstName', first); }
+            if(last){ url.searchParams.set('last_name', last); url.searchParams.set('lastName', last); }
+          }
+          if(email){
+            url.searchParams.set('email', email);
+            url.searchParams.set('contactEmail', email);
+            url.searchParams.set('emailAddress', email);
+            url.searchParams.set('prefill_email', email);
+            url.searchParams.set('contact[email]', email);
+          }
+
+          // Additional info summary (email intentionally excluded)
+          url.searchParams.set('additionalInfo', info);
+
+          // Optional identifiers from config, state, or data attributes
+          const defaultLocId = lcCfg.locationId || 'xK1e5YGQ7gK6NjoyhyRI';
+          const defaultCalId = lcCfg.calendarId || 'UL9SNgWU3gjlVPKyzTMv';
+          const ds = iframe.dataset || {};
+          const locId = state.locationId || ds.locationId || ds.location_id || defaultLocId || '';
+          const calId = state.calendarId || ds.calendarId || ds.calendar_id || defaultCalId || '';
+          if(locId){ url.searchParams.set('locationId', locId); url.searchParams.set('location_id', locId); }
+          if(calId){ url.searchParams.set('calendarId', calId); url.searchParams.set('calendar_id', calId); }
+        };
+
+        if(enableLeadConnector){
+          const u = new URL('https://api.leadconnectorhq.com/widget/bookings/calendar-for-ai');
+          setCommonParams(u);
+
+          // Fallback to original embed if remote fails or is slow
+          let fallbackTimer = setTimeout(() => { iframe.src = originalSrc; }, 6000);
+          const onLoad = () => { clearTimeout(fallbackTimer); iframe.removeEventListener('load', onLoad); };
+          const onErr = () => { clearTimeout(fallbackTimer); iframe.src = originalSrc; iframe.removeEventListener('error', onErr); };
+          iframe.addEventListener('load', onLoad, { once: true });
+          iframe.addEventListener('error', onErr, { once: true });
+
+          iframe.src = u.toString();
+        } else {
+          // Keep existing embed and try to prefill using the same/fallback params
+          try{
+            const u = new URL(originalSrc, window.location.origin);
+            setCommonParams(u);
+            iframe.src = u.toString();
+          }catch(_){/* ignore */}
+        }
+      }
+    }catch(_){}
+    // Visible summary above the calendar for user clarity
+    try{
+      let summary = cal.querySelector('.bmms-calendar-summary');
+      if(!summary){ summary = document.createElement('div'); summary.className='bmms-calendar-summary'; cal.prepend(summary); }
+      summary.innerHTML = '';
+      const title = document.createElement('h5'); title.className = 'bmms-summary-title'; title.textContent = 'Booking Info Summary';
+      const imgWrap = document.createElement('div'); imgWrap.className = 'bmms-summary-image';
+      if(state.selected && state.selected.dataUrl){ const img = new Image(); img.src = state.selected.dataUrl; img.alt = 'Selected logo'; imgWrap.appendChild(img); }
+      const list = document.createElement('ul'); list.className = 'bmms-summary-list';
+      // Name
+      if(state.name){ const li = document.createElement('li'); li.innerHTML = `<strong>Name:</strong> ${escapeHtml(state.name)}`; list.appendChild(li); }
+      // Selected image
+      { const li = document.createElement('li'); li.innerHTML = `<strong>Selected image:</strong> ${state.selected && state.selected.dataUrl ? 'Attached preview' : 'None selected'}`; list.appendChild(li); }
+      // Prompts (trimmed)
+      if(Array.isArray(state._variationPrompts) && state._variationPrompts.length){ const tops = state._variationPrompts.slice(0,3).map(p=> String(p).replace(/\s+/g,' ').slice(0,180)); const li = document.createElement('li'); li.innerHTML = `<strong>Prompts:</strong> ${escapeHtml(tops.join(' | '))}`; list.appendChild(li); }
+      summary.appendChild(title);
+      summary.appendChild(imgWrap);
+      summary.appendChild(list);
+    }catch(_){}
+  }
+
+  // Step 9 handlers
+  const s9 = steps.s9; if(s9){ s9.addEventListener('click', async function(e){ const t=e.target; if(t.closest('.bmms-back')){ showStep('s8'); return; } if(t.closest('.bmms-next')){ const meta = { styles:(state.styles||[]), product:{ sku: state.productSku||'', name: state.productName||'', category: state.productCategory||'' } }; await sendGhlTag('AGUI_AssetsReady', meta); try{ alert('Booked! We’ll email your summary and assets links.'); }catch(_){} } }); }
 
   function download(dataUrl, name){ const a=document.createElement('a'); a.href=dataUrl; a.download=name||'download.png'; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),100); }
 
@@ -2867,7 +3215,7 @@
     return chosen;
   }
 
-  async function createVariants(n, st){ 
+  async function createVariants(n, st, onProgress){ 
     const arr=[];
     const name = (st.brand_text||st.name||'Your Brand');
     const description = st.description || '';
@@ -2885,9 +3233,9 @@
       }
     })();
 
-    // Create AI prompts for logo variations
-    const emailPart = email ? ` Contact email: ${email}.` : '';
-    const basePrompt = `Create a professional logo for "${name}". Business description: ${description}. Style: ${iconStyle}.` + emailPart + ((st && st.selectedIdea) ? ' Use the provided reference image as the foundation for layout and iconography.' : '');
+    // Create AI prompts for logo variations (exclude email from prompt per request)
+    const styleSeeds = buildStyleSeeds(st.styles || []);
+    const basePrompt = `Create a professional logo for "${name}". Business description: ${description}. Style: ${iconStyle}.` + (styleSeeds ? ` ${styleSeeds}` : '') + ((st && st.selectedIdea) ? ' Use the provided reference image as the foundation for layout and iconography.' : '');
 
     // Map selected reference image to canonical style labels
     const selectedIdeaName = (function(){
@@ -2941,13 +3289,23 @@
         variations.unshift(v);
       }
     }
+    // Persist prompts on state for downstream use (e.g., calendar additional info)
+    try{ st._variationPrompts = variations.slice(0, n); }catch(_){}
 
-    // Multi-endpoint fallback: try WP REST, then Agent, then FastAPI if configured
+    // Multi-endpoint fallback: try Fal.ai (FastAPI) first, then Agent, then WP REST
     const cfg = window.AGUiConfig || window.AGConfig || {};
     const wp = (cfg.wpImageEndpoint || '').replace(/\/$/, '') || '/wp-json/agui-chat/v1/image/generate';
     const agent = (cfg.agentImageEndpoint || '').replace(/\/$/, '');
-    const fastApi = (cfg.fastApiImageEndpoint || '').replace(/\/$/, '');
-    let endpoints = [wp, agent, fastApi].filter(Boolean);
+    // Prefer explicit fastApiImageEndpoint; otherwise derive from fastApiBase
+    let fastApi = (cfg.fastApiImageEndpoint || '').replace(/\/$/, '');
+    if (!fastApi && cfg.fastApiBase) {
+      try { fastApi = (String(cfg.fastApiBase).replace(/\/$/, '')) + '/api/fal/generate'; } catch(e) {}
+    }
+    let endpoints = [fastApi, agent, wp].filter(Boolean);
+    // If Fal Key is configured (handled by WP route), prioritize WP endpoint first
+    if ((cfg.falKey || cfg.fal_key) && wp) {
+      endpoints = [wp].concat(endpoints.filter(e => e !== wp));
+    }
 
     // Feature flag: allow disabling non-WordPress fallbacks entirely
     const disableAgentFallbacks = !!(cfg.disableAgentFallbacks || cfg.disableNonWpFallbacks);
@@ -2955,9 +3313,10 @@
       endpoints = [wp].filter(Boolean);
     }
 
-    // Generate logos using AI across available endpoints
-    for (let i = 0; i < Math.min(n, variations.length); i++) {
+    // Helper to generate a single variant with fallback endpoints
+    async function generateOne(i){
       let success = false;
+      let out = null;
       // Decide whether to include image_url (skip for localhost/.local to avoid Fal fetch failures)
       let imageUrl = '';
       try {
@@ -2973,10 +3332,10 @@
       const payload = {
         prompt: variations[i],
         image_url: imageUrl,
-        size: '1024x1024',
+        size: '512x512',
         format: 'png',
-        guidance_scale: 3.5,
-        num_inference_steps: 25
+        guidance_scale: 3.2,
+        num_inference_steps: 12
       };
 
       for (const endpoint of endpoints){
@@ -2996,11 +3355,23 @@
             }
           } catch(e) {}
 
+          const controller = new AbortController();
+          let timeoutMs = 16000;
+          try {
+            const uu = new URL(endpoint, window.location.origin);
+            const host = uu.hostname || '';
+            const isNgrok = /ngrok-free\.dev$/i.test(host) || /ngrok-free/i.test(endpoint);
+            // Adaptive timeout: give first two variants extra time; add margin for ngrok
+            timeoutMs = (i < 2) ? (isNgrok ? 22000 : 20000) : (isNgrok ? 18000 : 16000);
+          } catch(e) {}
+          const tm = setTimeout(() => controller.abort(), timeoutMs);
           const response = await fetch(endpoint, {
             method: 'POST',
             headers,
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
           });
+          clearTimeout(tm);
 
           if (response.ok) {
             const result = await response.json();
@@ -3009,16 +3380,14 @@
             if (clean && String(clean).startsWith('data:image/svg')){
               try {
                 const png = await svgToPng(clean, 1024, 1024);
-                arr.push({ id: 'ai_v' + i, dataUrl: png, prompt: variations[i], placeholder: true });
-                success = true;
-                break; // done for this variant
+                out = { id: 'ai_v' + i, dataUrl: png, prompt: variations[i], placeholder: true };
+                success = true; break;
               } catch(convErr) {
                 console.warn('SVG to PNG conversion failed for variant', i, convErr);
               }
             } else if (clean) {
-              arr.push({ id: 'ai_v' + i, dataUrl: clean, prompt: variations[i] });
-              success = true;
-              break; // done for this variant
+              out = { id: 'ai_v' + i, dataUrl: clean, prompt: variations[i] };
+              success = true; break;
             } else {
               console.warn('No valid AI image URL returned for variant', i, 'via', endpoint);
             }
@@ -3027,13 +3396,40 @@
           }
         } catch(error) {
           console.warn('AI generation failed via', endpoint, 'for variant', i, error);
+          // Small backoff before trying the next endpoint
+          await new Promise(r => setTimeout(r, 300));
         }
       }
-
-      if (!success) {
-        // Skip variant if all endpoints failed
+      if(success && out){
+        arr.push(out);
+        try{ if(typeof onProgress === 'function') onProgress(out, i, arr.length); }catch(e){}
+        return out;
       }
+      // Client-side placeholder fallback to avoid empty grids
+      try{
+        const safePrompt = String(variations[i] || '').replace(/<[^>]*>/g,' ').slice(0, 80);
+        const phSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540"><rect width="100%" height="100%" fill="#eef2ff"/><text x="50%" y="45%" text-anchor="middle" font-family="Inter,Arial" font-size="36" fill="#111" opacity="0.9">${name}</text><text x="50%" y="60%" text-anchor="middle" font-family="Inter,Arial" font-size="20" fill="#333">${safePrompt}</text></svg>`;
+        const phDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(phSvg);
+        const placeholder = { id: 'ph_v' + i, dataUrl: phDataUrl, prompt: variations[i], placeholder: true };
+        arr.push(placeholder);
+        if(typeof onProgress === 'function') onProgress(placeholder, i, arr.length);
+        return placeholder;
+      }catch(e){}
+      return null;
     }
+
+    // Concurrency pool to speed up generation
+    const total = Math.min(n, variations.length);
+    const indices = Array.from({length: total}, (_,i)=>i);
+    const maxConcurrent = 4;
+    let cursor = 0;
+    const workers = Array.from({length: Math.min(maxConcurrent, total)}, async ()=>{
+      while(cursor < total){
+        const i = cursor++;
+        await generateOne(i);
+      }
+    });
+    await Promise.all(workers);
 
     return arr; 
   }
@@ -3074,7 +3470,39 @@
       candidates.push(data?.image?.url);
       candidates.push(data?.image?.data_uri);
       candidates.push(data?.image?.base64);
-      const found = candidates.find(u => typeof u==='string' && u);
+      let found = candidates.find(u => typeof u==='string' && u);
+      if(found) return found;
+
+      // Deep scan for any string value that looks like an image URL/URI/base64/SVG
+      const isImgString = (s) => {
+        if (typeof s !== 'string' || !s) return false;
+        const t = s.trim();
+        if (/^data:image\//i.test(t)) return true;           // data URI
+        if (/^https?:\/\//i.test(t)) return true;           // http/https URL
+        if (/^<svg[\s\S]*<\/svg>$/i.test(t)) return true;  // raw SVG markup
+        if (/^[A-Za-z0-9+/=]+$/.test(t) && t.length > 100) return true; // raw base64
+        return false;
+      };
+      const walk = (v) => {
+        try{
+          if (isImgString(v)) return v;
+          if (Array.isArray(v)){
+            for (const item of v){ const res = walk(item); if (res) return res; }
+          } else if (v && typeof v === 'object'){
+            // Prefer common image-related keys first
+            const preferred = ['image','image_url','url','data_uri','dataUrl','base64','image_base64','b64_json','content','data'];
+            const keys = Object.keys(v);
+            keys.sort((a,b)=> preferred.indexOf(a) - preferred.indexOf(b));
+            for (const k of keys){ const res = walk(v[k]); if (res) return res; }
+          }
+        }catch(e){}
+        return '';
+      };
+      found = walk(data);
+      if (found && /^<svg/i.test(found)){
+        // Wrap raw SVG markup as a data URI so it can be displayed/converted
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(found);
+      }
       return found || '';
     } catch(e){ return ''; }
   }

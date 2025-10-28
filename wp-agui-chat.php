@@ -96,6 +96,7 @@ class WP_AGUI_Chat_Plugin {
       'agentImageEndpoint' => $agent_image_endpoint,
       // Live settings endpoint so frontend can synchronize in real-time
       'wpSettingsEndpoint' => rest_url('agui-chat/v1/settings'),
+      'wpTagEndpoint' => rest_url('agui-chat/v1/ghl/tag'),
     ]);
   }
 
@@ -209,9 +210,9 @@ class WP_AGUI_Chat_Plugin {
   public function shortcode_bm_ms_form($atts = [], $content = null){
     ob_start();
     ?>
-    <section class="bm-ms-form" id="bm-ms-form" aria-label="BrandMe multi-step logo form">
+    <section class="bm-ms-form bmms-theme-godaddy" id="bm-ms-form" aria-label="BrandMe multi-step logo form">
       <div class="bm-ms-form-content">
-        
+
       <!-- Step 1: Describe business + Name + Email -->
       <form id="bmms-step1" class="bmms-step active" autocomplete="off">
         <div class="bmms-splash-header">
@@ -233,8 +234,8 @@ class WP_AGUI_Chat_Plugin {
           </label>
           <p class="bmms-tip">Tip: Including your business name gives me more to work with.</p>
         </div>
-        <div class="actions">
-          <button type="submit" class="btn btn-primary">Get Started</button>
+        <div class="bmms-actions">
+          <button type="submit" class="bmms-btn bmms-btn-primary">Get Started</button>
         </div>
       </form>
 
@@ -245,17 +246,41 @@ class WP_AGUI_Chat_Plugin {
           <div class="bmms-splash-text">Hang tight, I’m getting your logo started</div>
         </div>
         <div class="bmms-options" style="display:none" aria-live="polite">
-          <h3 class="bmms-section-title">Let’s start with your logo’s foundation: your icon</h3>
-          <p class="bmms-help">Choose the one you like best (single selection).</p>
-          <div class="bmms-icon-grid" role="radiogroup">
-            <label class="bmms-icon-card"><input type="radio" name="bmms_icon" value="lightning" /><span class="icon i-lightning"></span><span class="label">Lightning</span></label>
-            <label class="bmms-icon-card"><input type="radio" name="bmms_icon" value="gauge" /><span class="icon i-gauge"></span><span class="label">Gauge</span></label>
-            <label class="bmms-icon-card"><input type="radio" name="bmms_icon" value="rocket" /><span class="icon i-rocket"></span><span class="label">Rocket</span></label>
-            <label class="bmms-icon-card"><input type="radio" name="bmms_icon" value="custom" /><span class="icon i-custom"></span><span class="label">Make my own</span></label>
+          <h3 class="bmms-section-title">Optional: Provide a social handle for a quick vibe scan</h3>
+           <div class="bmms-fields" style="max-width:500px;margin:0 auto 12px">
+             <label class="field bmms-optional"><span>Social handle (optional)</span>
+               <input type="text" name="social_handle" placeholder="@brand" />
+             </label>
+             <div class="bmms-tip">If provided, we’ll summarize audience & vibe before proceeding.</div>
+             <div class="bmms-social-summary" style="display:none"></div>
+           </div>
+
+          <!-- Icon selection removed for minimalist Step 2 UI -->
+
+          <h3 class="bmms-section-title" style="margin-top:16px">Pick up to 3 styles</h3>
+          <div class="bmms-style-grid" role="group" aria-label="Logo styles" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:680px;margin:8px auto">
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Futuristic">Futuristic</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Elegant">Elegant</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Corporate">Corporate</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Classic">Classic</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Geometric">Geometric</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Abstract">Abstract</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Hand-draw">Hand-draw</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Mascot">Mascot</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Minimalist">Minimalist</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Symbolic">Symbolic</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Vintage">Vintage</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Art Deco">Art Deco</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Grunge">Grunge</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Modern">Modern</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Nature">Nature</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Monogram">Monogram</button>
+            <button type="button" class="bmms-btn bmms-style-btn" data-style="Line Art">Line Art</button>
           </div>
-          <div class="actions">
-            <button type="button" class="btn bmms-back">Back</button>
-            <button type="button" class="btn btn-primary bmms-next" data-next="3">Continue</button>
+
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="3">Continue</button>
           </div>
         </div>
       </div>
@@ -266,16 +291,26 @@ class WP_AGUI_Chat_Plugin {
           <div class="bmms-logo-anim large" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
           <div class="bmms-splash-text">Just a moment, I’m getting your logo started</div>
         </div>
-        <form class="bmms-fields" style="display:none">
-          <label class="field"><span>What text would you like to add to your logo?</span>
-            <input type="text" name="brand_text" placeholder="I suggest using your business name" />
+        <div class="bmms-fields" style="display:none">
+          <label class="field"><span>Brand name</span>
+            <div class="bmms-flex-row">
+              <input type="text" name="brand_text" placeholder="e.g., SwiftBoost" />
+              <button type="button" class="bmms-btn bmms-generate" title="Generate options">Generate</button>
+            </div>
           </label>
-          <div class="actions">
-            <button type="button" class="btn bmms-back">Back</button>
-            <button type="button" class="btn bmms-skip">Skip</button>
-            <button type="button" class="btn btn-primary bmms-next" data-next="4">Continue</button>
+          <div class="bmms-name-options" style="display:none;margin:8px 0"></div>
+          <label class="field"><span>Tagline (optional)</span>
+            <input type="text" name="brand_tagline" placeholder="e.g., Fuel your growth" />
+          </label>
+          <div id="bmms-selected-styles" class="bmms-selected-styles" style="display:none;margin:6px 0 12px;color:#64748b;font-size:13px"></div>
+          <label class="field"><span>Describe your brand vibe (optional)</span>
+            <textarea name="brand_desc" placeholder="e.g., modern, trustworthy, energetic"></textarea>
+          </label>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="4">Continue</button>
           </div>
-        </form>
+        </div>
       </div>
 
       <!-- Step 4: Splash + slider with 12 variations (3 x 4) -->
@@ -289,9 +324,9 @@ class WP_AGUI_Chat_Plugin {
           <button class="bmms-slide-nav prev" aria-label="Previous">‹</button>
           <button class="bmms-slide-nav next" aria-label="Next">›</button>
           <div class="bmms-slides" aria-live="polite"></div>
-          <div class="actions">
-            <button type="button" class="btn bmms-back">Back</button>
-            <button type="button" class="btn btn-primary bmms-next" data-next="5">Continue</button>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="5">Continue</button>
           </div>
         </div>
       </div>
@@ -305,17 +340,106 @@ class WP_AGUI_Chat_Plugin {
         <div class="bmms-final" style="display:none">
           <div class="bmms-final-view">
             <img id="bmms-final-image" alt="Final logo preview" />
-            <button type="button" class="btn bmms-zoom">Zoom</button>
+            <button type="button" class="bmms-btn bmms-zoom">Zoom</button>
           </div>
-          <div class="actions">
-            <button type="button" class="btn bmms-back">Back</button>
-            <button type="button" class="btn btn-primary bmms-download">Download PNG</button>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="6">Continue</button>
+            <button type="button" class="bmms-btn bmms-download">Download PNG</button>
           </div>
           <div class="bmms-zoom-overlay" role="dialog" aria-modal="true" style="display:none">
             <div class="bmms-zoom-inner"><img id="bmms-zoom-image" alt="Zoomed logo" /><button class="bmms-zoom-close" aria-label="Close">×</button></div>
           </div>
         </div>
       </div>
+
+      <!-- Step 6: Product selection -->
+      <div id="bmms-step6" class="bmms-step" data-step="6">
+        <div class="bmms-splash">
+          <div class="bmms-logo-anim large" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="bmms-splash-text">Pick a product category and SKU</div>
+        </div>
+        <div class="bmms-fields" style="display:none">
+          <h3 class="bmms-section-title">Choose a category</h3>
+          <div class="bmms-category-grid" role="group" aria-label="Product categories" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:680px;margin:8px auto">
+            <button type="button" class="bmms-btn bmms-cat" data-cat="Energy">Energy</button>
+            <button type="button" class="bmms-btn bmms-cat" data-cat="Beauty">Beauty</button>
+            <button type="button" class="bmms-btn bmms-cat" data-cat="Fitness">Fitness</button>
+            <button type="button" class="bmms-btn bmms-cat" data-cat="Pets">Pets</button>
+            <button type="button" class="bmms-btn bmms-cat" data-cat="Outdoor">Outdoor</button>
+            <button type="button" class="bmms-btn bmms-cat" data-cat="Home">Home</button>
+          </div>
+          <div class="bmms-sku-list" style="display:none"></div>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="7" disabled>Continue</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 7: Label preview with nudge controls -->
+      <div id="bmms-step7" class="bmms-step" data-step="7">
+        <div class="bmms-splash">
+          <div class="bmms-logo-anim large" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="bmms-splash-text">Rendering your label preview…</div>
+        </div>
+        <div class="bmms-final" style="display:none">
+          <div class="bmms-final-view">
+            <img id="bmms-nudge-preview" alt="Label preview" />
+          </div>
+          <div class="bmms-nudges" style="display:flex;gap:8px;justify-content:center;margin:8px 0">
+            <button type="button" class="bmms-btn bmms-nudge-up">Move Up</button>
+            <button type="button" class="bmms-btn bmms-nudge-down">Move Down</button>
+            <button type="button" class="bmms-btn bmms-nudge-bigger">Bigger Logo</button>
+            <button type="button" class="bmms-btn bmms-nudge-smaller">Smaller Logo</button>
+            <button type="button" class="bmms-btn bmms-nudge-bg">Change BG</button>
+          </div>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="8">Continue</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 8: Profit calculator -->
+      <div id="bmms-step8" class="bmms-step" data-step="8">
+        <div class="bmms-splash">
+          <div class="bmms-logo-anim large" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="bmms-splash-text">Let’s estimate your campaign results…</div>
+        </div>
+        <div class="bmms-fields" style="display:none">
+          <div class="bmms-grid-2" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:680px;margin:0 auto">
+            <label class="field"><span>Followers</span><input type="number" name="followers" placeholder="10000" /></label>
+            <label class="field"><span>Conversion %</span><input type="number" name="conv" placeholder="2" /></label>
+            <label class="field"><span>Price per unit ($)</span><input type="number" name="price" placeholder="19" /></label>
+            <label class="field"><span>Margin %</span><input type="number" name="margin" placeholder="50" /></label>
+          </div>
+          <div class="bmms-profit-result" style="text-align:center;margin:12px 0"></div>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="9">Continue</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 9: Book calendar (GHL) -->
+      <div id="bmms-step9" class="bmms-step" data-step="9">
+        <div class="bmms-splash">
+          <div class="bmms-logo-anim large" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="bmms-splash-text">Book a call to finalize</div>
+        </div>
+        <div class="bmms-fields" style="display:none">
+          <div class="bmms-ghl-calendar" style="min-height:360px;border-radius:8px">
+            <iframe src="https://api.leadconnectorhq.com/widget/booking/UL9SNgWU3gjlVPKyzTMv" style="width: 100%;border:none;overflow: hidden;min-height:360px;" scrolling="no" id="UL9SNgWU3gjlVPKyzTMv_1761625908434"></iframe>
+            <script src="https://link.msgsndr.com/js/form_embed.js" type="text/javascript"></script>
+          </div>
+          <div class="bmms-actions">
+            <button type="button" class="bmms-btn bmms-back">Back</button>
+            <button type="button" class="bmms-btn bmms-btn-primary bmms-next" data-next="done">Confirm</button>
+          </div>
+        </div>
+      </div>
+
       </div>
     </section>
     <?php
@@ -437,6 +561,13 @@ class WP_AGUI_Chat_Plugin {
       'callback' => [$this, 'rest_settings'],
       'permission_callback' => '__return_true', // public read; add auth in production if needed
     ]);
+
+    // New: Tag a GHL contact for asset delivery
+    register_rest_route('agui-chat/v1', '/ghl/tag', [
+      'methods' => 'POST',
+      'callback' => [$this, 'rest_ghl_tag'],
+      'permission_callback' => '__return_true', // public for now; add nonce/rate-limit in production
+    ]);
   }
 
   public function rest_ghl_contact($request){
@@ -556,6 +687,132 @@ class WP_AGUI_Chat_Plugin {
     return new WP_REST_Response(['ok'=>($code>=200 && $code<300),'code'=>$code,'data'=>$body,'contactId'=>$contactId], $code);
   }
 
+  public function rest_ghl_tag($request){
+    $data = $request->get_json_params();
+    if(!$data){ $data = $request->get_body_params(); }
+    if(!$data){
+      $raw = method_exists($request,'get_body') ? $request->get_body() : '';
+      if($raw){ $decoded = json_decode($raw, true); if(is_array($decoded)) $data = $decoded; }
+    }
+
+    $cfg = self::get_settings();
+    if(empty($cfg['ghl_pit']) || empty($cfg['ghl_location_id'])){
+      return new WP_REST_Response(['ok'=>false,'error'=>'GHL not configured'], 400);
+    }
+
+    $token = trim($cfg['ghl_pit']);
+    if(stripos($token, 'bearer ') !== 0){ $token = 'Bearer '.$token; }
+    $base = rtrim($cfg['ghl_api_base'],'/');
+
+    $contactId = '';
+    if(isset($data['contact_id']) && $data['contact_id']){ $contactId = $data['contact_id']; }
+    elseif(isset($data['contactId']) && $data['contactId']){ $contactId = $data['contactId']; }
+
+    $email = isset($data['email']) ? trim($data['email']) : '';
+
+    // If no contactId, try to locate by email
+    if(!$contactId && $email){
+      $headers = [
+        'Authorization' => $token,
+        'Accept' => 'application/json',
+        'Version' => $cfg['ghl_version'],
+      ];
+      $urls = [
+        $base . '/contacts/search?locationId=' . urlencode($cfg['ghl_location_id']) . '&query=' . urlencode($email),
+        $base . '/contacts?locationId=' . urlencode($cfg['ghl_location_id']) . '&email=' . urlencode($email),
+        $base . '/contacts?email=' . urlencode($email),
+        $base . '/contacts/search?query=' . urlencode($email),
+      ];
+      foreach ($urls as $u) {
+        $res = wp_remote_get($u, [ 'headers' => $headers, 'timeout' => 20 ]);
+        if (is_wp_error($res)) { continue; }
+        $raw = wp_remote_retrieve_body($res);
+        $json = json_decode($raw, true);
+        if (is_array($json)) {
+          if (isset($json['contacts'][0]['id'])) { $contactId = $json['contacts'][0]['id']; }
+          elseif (isset($json['data']['contacts'][0]['id'])) { $contactId = $json['data']['contacts'][0]['id']; }
+          elseif (isset($json['contact']['id'])) { $contactId = $json['contact']['id']; }
+          elseif (isset($json['id'])) { $contactId = $json['id']; }
+          elseif (isset($json['data']['id'])) { $contactId = $json['data']['id']; }
+          elseif (isset($json['result']['contacts'][0]['id'])) { $contactId = $json['result']['contacts'][0]['id']; }
+        }
+        if ($contactId) break;
+      }
+    }
+
+    if(!$contactId){
+      return new WP_REST_Response(['ok'=>false,'error'=>'Contact not found'], 404);
+    }
+
+    $tag = '';
+    if(isset($data['tag']) && $data['tag']){ $tag = trim($data['tag']); }
+    elseif(isset($data['tagName']) && $data['tagName']){ $tag = trim($data['tagName']); }
+    if(!$tag){ $tag = 'AGUI_AssetsReady'; }
+
+    $headers_common = [
+      'Authorization' => $token,
+      'Content-Type' => 'application/json',
+      'Accept' => 'application/json',
+      'Version' => $cfg['ghl_version'],
+    ];
+
+    // Attempt 1: POST /contacts/tags
+    $body1 = [
+      'contactId' => $contactId,
+      'tags' => [$tag],
+      'locationId' => $cfg['ghl_location_id'],
+    ];
+    $resp1 = wp_remote_post($base.'/contacts/tags', [
+      'headers' => $headers_common,
+      'body' => wp_json_encode($body1),
+      'timeout' => 20,
+    ]);
+    if(!is_wp_error($resp1)){
+      $code1 = wp_remote_retrieve_response_code($resp1);
+      $raw1 = wp_remote_retrieve_body($resp1);
+      $json1 = json_decode($raw1, true);
+      if($code1>=200 && $code1<300){
+        return new WP_REST_Response(['ok'=>true,'code'=>$code1,'data'=>$json1,'contactId'=>$contactId,'tag'=>$tag], 200);
+      }
+    }
+
+    // Attempt 2: POST /contacts/{id}/tags
+    $body2 = [ 'tags' => [$tag] ];
+    $resp2 = wp_remote_post($base.'/contacts/'.$contactId.'/tags', [
+      'headers' => $headers_common,
+      'body' => wp_json_encode($body2),
+      'timeout' => 20,
+    ]);
+    if(!is_wp_error($resp2)){
+      $code2 = wp_remote_retrieve_response_code($resp2);
+      $raw2 = wp_remote_retrieve_body($resp2);
+      $json2 = json_decode($raw2, true);
+      if($code2>=200 && $code2<300){
+        return new WP_REST_Response(['ok'=>true,'code'=>$code2,'data'=>$json2,'contactId'=>$contactId,'tag'=>$tag], 200);
+      }
+    }
+
+    // Attempt 3: Alternate body { tag: "" }
+    $body3 = [ 'tag' => $tag ];
+    $resp3 = wp_remote_post($base.'/contacts/'.$contactId.'/tags', [
+      'headers' => $headers_common,
+      'body' => wp_json_encode($body3),
+      'timeout' => 20,
+    ]);
+    if(!is_wp_error($resp3)){
+      $code3 = wp_remote_retrieve_response_code($resp3);
+      $raw3 = wp_remote_retrieve_body($resp3);
+      $json3 = json_decode($raw3, true);
+      if($code3>=200 && $code3<300){
+        return new WP_REST_Response(['ok'=>true,'code'=>$code3,'data'=>$json3,'contactId'=>$contactId,'tag'=>$tag], 200);
+      }
+      return new WP_REST_Response(['ok'=>false,'code'=>$code3,'error'=>$raw3,'contactId'=>$contactId,'tag'=>$tag], $code3);
+    }
+
+    // Network error on all attempts
+    return new WP_REST_Response(['ok'=>false,'error'=>is_wp_error($resp1)?$resp1->get_error_message():'Unknown error','contactId'=>$contactId,'tag'=>$tag], 500);
+  }
+
   // Helper: try Banana.dev image generation with polling
   private function try_banana_generate($api_key, $model_key, $prompt, $body_arr) {
     // Start the Banana.dev job
@@ -639,9 +896,12 @@ class WP_AGUI_Chat_Plugin {
 
   // Helper: extract image URL from varied Fal/Agent/FastAPI response shapes
   private function find_image_url($data) {
+    // Fast path: direct URL string
     if (is_string($data) && preg_match('/^https?:\/\//', $data)) return $data;
+
     $d = is_array($data) ? $data : [];
     $candidates = [];
+    // Common flat fields
     $candidates[] = $d['image_url'] ?? null;
     $candidates[] = $d['url'] ?? null;
     if (isset($d['image']) && is_string($d['image'])) $candidates[] = $d['image'];
@@ -649,16 +909,77 @@ class WP_AGUI_Chat_Plugin {
     $candidates[] = $d['dataUrl'] ?? null;
     $candidates[] = $d['image_base64'] ?? null;
     $candidates[] = $d['base64'] ?? null;
+    $candidates[] = $d['b64_json'] ?? null; // OpenAI/Fal style base64 field
+    $candidates[] = $d['content'] ?? null;  // sometimes inline SVG/content
+
+    // Nested/array shapes
     if (isset($d['images'][0]['url'])) $candidates[] = $d['images'][0]['url'];
+    if (isset($d['images'][0]['b64_json'])) $candidates[] = $d['images'][0]['b64_json'];
+
     if (isset($d['output']['images'][0]['url'])) $candidates[] = $d['output']['images'][0]['url'];
+    if (isset($d['output']['images'][0]['b64_json'])) $candidates[] = $d['output']['images'][0]['b64_json'];
+
     if (isset($d['result']['images'][0]['url'])) $candidates[] = $d['result']['images'][0]['url'];
+    if (isset($d['result']['images'][0]['b64_json'])) $candidates[] = $d['result']['images'][0]['b64_json'];
+
     if (isset($d['data']['images'][0]['url'])) $candidates[] = $d['data']['images'][0]['url'];
+    if (isset($d['data']['images'][0]['b64_json'])) $candidates[] = $d['data']['images'][0]['b64_json'];
+
     if (isset($d['data']['image_url'])) $candidates[] = $d['data']['image_url'];
     if (isset($d['data']['image']['url'])) $candidates[] = $d['data']['image']['url'];
+    if (isset($d['data']['image']['base64'])) $candidates[] = $d['data']['image']['base64'];
+    if (isset($d['data']['image']['data_uri'])) $candidates[] = $d['data']['image']['data_uri'];
+
     if (isset($d['image']['url'])) $candidates[] = $d['image']['url'];
     if (isset($d['image']['data_uri'])) $candidates[] = $d['image']['data_uri'];
     if (isset($d['image']['base64'])) $candidates[] = $d['image']['base64'];
-    foreach ($candidates as $u) { if (is_string($u) && $u !== '') return $u; }
+
+    // Return first usable candidate
+    foreach ($candidates as $u) {
+      if (!is_string($u) || $u === '') continue;
+      $t = trim($u);
+      // Direct URL
+      if (preg_match('/^https?:\/\//i', $t)) return $t;
+      // Data URI
+      if (preg_match('/^data:image\//i', $t)) return $t;
+      // Raw SVG markup
+      if (preg_match('/^<svg[\s\S]*<\/svg>$/i', $t)) {
+        return 'data:image/svg+xml;charset=utf-8,' . rawurlencode($t);
+      }
+      // Base64 image content (long tokens)
+      if (preg_match('/^[A-Za-z0-9+\/]+=*$/', $t) && strlen($t) > 100) {
+        return 'data:image/png;base64,' . $t;
+      }
+    }
+
+    // Deep scan: walk nested arrays/objects to find any image-like string
+    $is_img_string = function($s){
+      if (!is_string($s) || $s === '') return false;
+      $t = trim($s);
+      return preg_match('/^https?:\/\//i', $t)
+          || preg_match('/^data:image\//i', $t)
+          || preg_match('/^<svg[\s\S]*<\/svg>$/i', $t)
+          || (preg_match('/^[A-Za-z0-9+\/]+=*$/', $t) && strlen($t) > 100);
+    };
+    $walk = function($v) use (&$walk, $is_img_string){
+      if ($is_img_string($v)) return $v;
+      if (is_array($v)) {
+        // prefer common keys first
+        $preferred = ['image','image_url','url','data_uri','dataUrl','base64','image_base64','b64_json','content','data','output','result','images'];
+        $keys = array_keys($v);
+        usort($keys, function($a,$b) use ($preferred){ return array_search($a,$preferred) - array_search($b,$preferred); });
+        foreach ($keys as $k){ $res = $walk($v[$k]); if ($res) return $res; }
+      }
+      return '';
+    };
+    $found = $walk($d);
+    if (is_string($found) && $found !== ''){
+      $t = trim($found);
+      if (preg_match('/^<svg/i', $t)) return 'data:image/svg+xml;charset=utf-8,' . rawurlencode($t);
+      if (preg_match('/^[A-Za-z0-9+\/]+=*$/', $t) && strlen($t) > 100) return 'data:image/png;base64,' . $t;
+      return $t;
+    }
+
     return '';
   }
 
@@ -730,7 +1051,8 @@ class WP_AGUI_Chat_Plugin {
         'Content-Type' => 'application/json',
         'Accept' => 'application/json',
       ];
-      $resp = wp_remote_post($url, [ 'headers' => $headers, 'body' => json_encode($body_arr), 'timeout' => 30 ]);
+      // Fal.run expects the payload under an "input" key
+      $resp = wp_remote_post($url, [ 'headers' => $headers, 'body' => json_encode(['input' => $body_arr]), 'timeout' => 30 ]);
       if (!is_wp_error($resp)) {
         $code = wp_remote_retrieve_response_code($resp);
         $json = json_decode(wp_remote_retrieve_body($resp), true);
