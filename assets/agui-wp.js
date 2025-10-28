@@ -2754,7 +2754,7 @@
       let variants = await createVariants(12, state);
       const total = variants.length;
       if(total === 0){
-        wrap.innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444;">No AI logos were generated. Please check your image generation endpoint or Fal.ai configuration, then retry.</div><div style="text-align:center; margin-top: 12px;"><button class="bmms-retry" type="button" style="background:#111827;color:#fff;padding:8px 14px;border-radius:6px;">Retry</button></div>';
+        wrap.innerHTML = '<div class="bmms-empty">No AI logos were generated. Please check your image generation endpoint or Fal.ai configuration, then retry.</div><div class="bmms-actions"><button class="bmms-btn bmms-btn-primary bmms-retry" type="button">Retry</button></div>';
         return;
       }
       state.slides = [ variants.slice(0,4), variants.slice(4,8), variants.slice(8,12) ];
@@ -2771,7 +2771,7 @@
       if(next){ next.onclick=()=>{ idx=(idx+1)%state.slides.length; render(); }; }
     } catch(error) {
       console.error('Failed to generate logo variations:', error);
-      wrap.innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444;">Failed to generate logos. Please try again.</div><div style="text-align:center; margin-top: 12px;"><button class="bmms-retry" type="button" style="background:#111827;color:#fff;padding:8px 14px;border-radius:6px;">Retry</button></div>';
+      wrap.innerHTML = '<div class="bmms-empty error">Failed to generate logos. Please try again.</div><div class="bmms-actions"><button class="bmms-btn bmms-btn-primary bmms-retry" type="button">Retry</button></div>';
     }
     
     // Listener moved outside to avoid multiple attachments
@@ -2845,20 +2845,59 @@
     // Create AI prompts for logo variations
     const emailPart = email ? ` Contact email: ${email}.` : '';
     const basePrompt = `Create a professional logo for "${name}". Business description: ${description}. Style: ${iconStyle}.` + emailPart + ((st && st.selectedIdea) ? ' Use the provided reference image as the foundation for layout and iconography.' : '');
-    const variations = [
-      `${basePrompt} Minimalist style with clean lines and modern typography`,
-      `${basePrompt} Bold and vibrant colors with strong visual impact`,
-      `${basePrompt} Elegant and sophisticated design with premium feel`,
-      `${basePrompt} Creative and artistic approach with unique elements`,
-      `${basePrompt} Tech-focused design with geometric shapes`,
-      `${basePrompt} Classic and timeless design with traditional elements`,
-      `${basePrompt} Playful and friendly design with rounded elements`,
-      `${basePrompt} Professional corporate style with strong branding`,
-      `${basePrompt} Modern gradient design with contemporary feel`,
-      `${basePrompt} Monochrome design with strong contrast`,
-      `${basePrompt} Colorful and energetic design with dynamic elements`,
-      `${basePrompt} Luxury brand design with premium aesthetics`
+
+    // Map selected reference image to canonical style labels
+    const selectedIdeaName = (function(){
+      try{
+        const idea = (st && st.selectedIdea) ? String(st.selectedIdea) : '';
+        const f = idea.split('/').pop() || '';
+        const b = f.split('.')[0] || '';
+        return b; // e.g., logoideas_01
+      }catch(_){ return ''; }
+    })();
+    const ideaStyleMap = {
+      'logoideas_01': 'Futuristic style',
+      'logoideas_02': 'Elegant style',
+      'logoideas_03': 'Corporate style',
+      'logoideas_04': 'Classic style',
+      'logoideas_05': 'Geometric style',
+      'logoideas_06': 'Abstract style',
+      'logoideas_07': 'Hand-drawn style',
+      'logoideas_08': 'Mascot style',
+      'logoideas_09': 'Minimalist style',
+      'logoideas_10': 'Symbolic style',
+      'logoideas_11': 'Vintage style',
+      'logoideas_12': 'Art Deco style',
+      'logoideas_13': 'Modern style',
+      'logoideas_14': 'Nature-inspired style'
+    };
+    const ideaStyle = ideaStyleMap[selectedIdeaName] || '';
+
+    // Explicit variation prompts as per specification (14 styles)
+    const variationSpecs = [
+      {label:'Futuristic style', key:'logoideas_01', text:'sleek, high-tech forms, forward motion cues, subtle gradients, metallic accents; scalable vector; legible at small sizes'},
+      {label:'Elegant style', key:'logoideas_02', text:'refined typography, thin strokes, balanced whitespace, premium feel; avoid clutter; vector clean'},
+      {label:'Corporate style', key:'logoideas_03', text:'professional branding, confidence and stability, strong typographic hierarchy; versatile across mediums'},
+      {label:'Classic style', key:'logoideas_04', text:'timeless forms, traditional symbolism, restrained palette; emphasize clarity and heritage'},
+      {label:'Geometric style', key:'logoideas_05', text:'simple geometric primitives, symmetry, precision, grid alignment; crisp vector rendering'},
+      {label:'Abstract style', key:'logoideas_06', text:'conceptual shapes, dynamic composition, expressive negative space; modern minimal palette'},
+      {label:'Hand-drawn style', key:'logoideas_07', text:'organic lines, sketch-like texture, human warmth; retain legibility and scalability'},
+      {label:'Mascot style', key:'logoideas_08', text:'character-driven icon, friendly personality, clear silhouette; readable at small sizes'},
+      {label:'Minimalist style', key:'logoideas_09', text:'clean lines, reduced detail, strong contrast; contemporary, scalable, brandable'},
+      {label:'Symbolic style', key:'logoideas_10', text:'emblematic marks, distilled meaning, balanced proportion; powerful iconography'},
+      {label:'Vintage style', key:'logoideas_11', text:'retro typography, classic ornamentation, muted tones; nostalgic but crisp'},
+      {label:'Art Deco style', key:'logoideas_12', text:'bold geometry, luxurious symmetry, decorative motifs; elegant proportions'},
+      {label:'Modern style', key:'logoideas_13', text:'current aesthetics, clean systems, flexible grid; trend-aware yet timeless'},
+      {label:'Nature-inspired style', key:'logoideas_14', text:'organic shapes, leaf/flow motifs, earthy palette; calm, balanced composition'}
     ];
+    let variations = variationSpecs.map(spec => `${basePrompt} ${spec.label} — ${spec.text}. Maintain visual consistency across elements while preserving the distinct characteristics of this style.`);
+    if(ideaStyle){
+      const idx = variationSpecs.findIndex(s => s.label === ideaStyle);
+      if(idx > 0){
+        const v = variations.splice(idx,1)[0];
+        variations.unshift(v);
+      }
+    }
 
     // Multi-endpoint fallback: try WP REST, then Agent, then FastAPI if configured
     const cfg = window.AGUiConfig || window.AGConfig || {};
